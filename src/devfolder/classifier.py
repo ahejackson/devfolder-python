@@ -6,6 +6,14 @@ from pathlib import Path
 from .config import Config
 from .models import ProjectNode, ProjectType
 
+__all__ = [
+    "classify_project",
+    "get_git_remotes",
+    "has_git_directory",
+    "is_empty_directory",
+    "username_in_remote_url",
+]
+
 
 def get_git_remotes(path: Path) -> dict[str, str]:
     """Get all git remotes for a repository.
@@ -131,7 +139,10 @@ def classify_project(path: Path, config: Config) -> ProjectNode:
         return ProjectNode(name=name, path=path, project_type=ProjectType.LOCAL_GIT)
 
     # Get the primary remote URL (origin first, then first available)
-    remote_url = remotes.get("origin") or next(iter(remotes.values()))
+    if "origin" in remotes:
+        remote_url = remotes["origin"]
+    else:
+        remote_url = next(iter(remotes.values()))
 
     # Check if it's a personal remote
     if config.username and username_in_remote_url(remote_url, config.username):

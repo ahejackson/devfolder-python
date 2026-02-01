@@ -4,6 +4,19 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
+__all__ = [
+    "CategoryNode",
+    "ErrorNode",
+    "IgnoredNode",
+    "IgnoreReason",
+    "Node",
+    "NodeKind",
+    "ProjectNode",
+    "ProjectType",
+    "ScanResult",
+    "SymlinkNode",
+]
+
 
 class NodeKind(Enum):
     """The kind of node in the directory tree."""

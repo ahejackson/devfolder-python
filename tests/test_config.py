@@ -70,6 +70,17 @@ class TestConfig:
 
         assert config.username == "myuser"
 
+    def test_load_non_string_username_returns_defaults(
+        self, tmp_path: Path
+    ) -> None:
+        """A non-string username value should be treated as invalid."""
+        config_file = tmp_path / "config.toml"
+        config_file.write_text("username = 42\n")
+
+        config = Config.load(config_file)
+
+        assert config.username is None
+
     def test_default_path(self) -> None:
         path = Config.default_path()
         assert path.name == "config.toml"

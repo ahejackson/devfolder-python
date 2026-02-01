@@ -1,5 +1,7 @@
 """Output formatting for devfolder."""
 
+__all__ = ["format_tree"]
+
 from .models import (
     CategoryNode,
     ErrorNode,
@@ -46,6 +48,8 @@ def format_ignore_reason(reason: IgnoreReason) -> str:
             return "[ignored: dotfolder]"
         case IgnoreReason.NODE_MODULES:
             return "[ignored: node_modules]"
+        case _:
+            raise ValueError(f"Unknown ignore reason: {reason}")
 
 
 def format_node(node: Node, prefix: str = "", is_last: bool = True) -> list[str]:
@@ -84,7 +88,8 @@ def format_node(node: Node, prefix: str = "", is_last: bool = True) -> list[str]
         case NodeKind.SYMLINK:
             assert isinstance(node, SymlinkNode)
             target_str = f" -> {node.target}" if node.target else ""
-            lines.append(f"{prefix}{connector}{DASH} {node.name}{target_str} [symlink]")
+            line = f"{prefix}{connector}{DASH} {node.name}/{target_str} [symlink]"
+            lines.append(line)
 
         case NodeKind.IGNORED:
             assert isinstance(node, IgnoredNode)

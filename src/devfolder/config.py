@@ -4,6 +4,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+__all__ = ["Config"]
+
 
 @dataclass(frozen=True)
 class Config:
@@ -37,6 +39,8 @@ class Config:
         except (OSError, tomllib.TOMLDecodeError):
             return cls()
 
-        return cls(
-            username=data.get("username"),
-        )
+        username = data.get("username")
+        if username is not None and not isinstance(username, str):
+            return cls()
+
+        return cls(username=username)

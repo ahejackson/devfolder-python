@@ -14,6 +14,8 @@ from .models import (
     SymlinkNode,
 )
 
+__all__ = ["scan", "scan_category", "should_ignore"]
+
 
 def should_ignore(entry: Path) -> IgnoreReason | None:
     """Check if an entry should be ignored.
@@ -35,6 +37,42 @@ def should_ignore(entry: Path) -> IgnoreReason | None:
     return None
 
 
+def _make_error_node(entry: Path, error: OSError) -> ErrorNode:
+    """Create an ErrorNode from a path and an OS error.
+
+    Args:
+        entry: The path that caused the error.
+        error: The OS error that occurred.
+
+    Returns:
+        An ErrorNode recording the error.
+    """
+    return ErrorNode(name=entry.name, path=entry, error_message=str(error))
+
+
+def _try_symlink_node(entry: Path) -> SymlinkNode | None:
+    """Create a SymlinkNode if the entry is a symlink to a directory.
+
+    Args:
+        entry: The directory entry to check.
+
+    Returns:
+        A SymlinkNode if the entry is a symlink to a directory, None otherwise.
+    """
+    if not entry.is_symlink():
+        return None
+
+    if not entry.is_dir():
+        return None
+
+    try:
+        target = entry.resolve()
+    except OSError:
+        target = None
+
+    return SymlinkNode(name=entry.name, path=entry, target=target)
+
+
 def scan_category(category_path: Path, config: Config) -> list[Node]:
     """Scan a category directory for projects.
 
@@ -49,38 +87,14 @@ def scan_category(category_path: Path, config: Config) -> list[Node]:
 
     try:
         entries = sorted(category_path.iterdir(), key=lambda p: p.name.lower())
-    except PermissionError as e:
-        return [
-            ErrorNode(
-                name=category_path.name,
-                path=category_path,
-                error_message=str(e),
-            )
-        ]
     except OSError as e:
-        return [
-            ErrorNode(
-                name=category_path.name,
-                path=category_path,
-                error_message=str(e),
-            )
-        ]
+        return [_make_error_node(category_path, e)]
 
     for entry in entries:
         # Handle symlinks to directories (don't follow them)
         if entry.is_symlink():
-            if entry.is_dir():
-                try:
-                    target = entry.resolve()
-                except OSError:
-                    target = None
-                children.append(
-                    SymlinkNode(
-                        name=entry.name,
-                        path=entry,
-                        target=target,
-                    )
-                )
+            if (symlink := _try_symlink_node(entry)) is not None:
+                children.append(symlink)
             continue
 
         # Skip non-directories
@@ -102,22 +116,8 @@ def scan_category(category_path: Path, config: Config) -> list[Node]:
         try:
             project = classify_project(entry, config)
             children.append(project)
-        except PermissionError as e:
-            children.append(
-                ErrorNode(
-                    name=entry.name,
-                    path=entry,
-                    error_message=str(e),
-                )
-            )
         except OSError as e:
-            children.append(
-                ErrorNode(
-                    name=entry.name,
-                    path=entry,
-                    error_message=str(e),
-                )
-            )
+            children.append(_make_error_node(entry, e))
 
     return children
 
@@ -147,44 +147,17 @@ def scan(root: Path, config: Config) -> ScanResult:
 
     try:
         entries = sorted(root.iterdir(), key=lambda p: p.name.lower())
-    except PermissionError as e:
-        return ScanResult(
-            root=root,
-            children=(
-                ErrorNode(
-                    name=root.name,
-                    path=root,
-                    error_message=str(e),
-                ),
-            ),
-        )
     except OSError as e:
         return ScanResult(
             root=root,
-            children=(
-                ErrorNode(
-                    name=root.name,
-                    path=root,
-                    error_message=str(e),
-                ),
-            ),
+            children=(_make_error_node(root, e),),
         )
 
     for entry in entries:
         # Handle symlinks to directories (don't follow them)
         if entry.is_symlink():
-            if entry.is_dir():
-                try:
-                    target = entry.resolve()
-                except OSError:
-                    target = None
-                children.append(
-                    SymlinkNode(
-                        name=entry.name,
-                        path=entry,
-                        target=target,
-                    )
-                )
+            if (symlink := _try_symlink_node(entry)) is not None:
+                children.append(symlink)
             continue
 
         # Skip non-directories
@@ -208,7 +181,7 @@ def scan(root: Path, config: Config) -> ScanResult:
                 project = classify_project(entry, config)
                 children.append(project)
                 continue
-        except (PermissionError, OSError):
+        except OSError:
             pass
 
         # Otherwise, treat as a category
@@ -221,22 +194,8 @@ def scan(root: Path, config: Config) -> ScanResult:
                     children=tuple(category_children),
                 )
             )
-        except PermissionError as e:
-            children.append(
-                ErrorNode(
-                    name=entry.name,
-                    path=entry,
-                    error_message=str(e),
-                )
-            )
         except OSError as e:
-            children.append(
-                ErrorNode(
-                    name=entry.name,
-                    path=entry,
-                    error_message=str(e),
-                )
-            )
+            children.append(_make_error_node(entry, e))
 
     return ScanResult(
         root=root,

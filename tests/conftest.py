@@ -10,13 +10,13 @@ import pytest
 from devfolder.config import Config
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def config() -> Config:
     """A config with a test username."""
     return Config(username="testuser")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def config_no_username() -> Config:
     """A config with no username set."""
     return Config(username=None)
