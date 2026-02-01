@@ -1,5 +1,6 @@
 """Integration tests for the devfolder CLI entry point."""
 
+import json
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -106,9 +107,150 @@ class TestMain:
             mock_ns = type(sys)("mock_ns")
             mock_ns.root = tmp_path  # type: ignore[attr-defined]
             mock_ns.config = config_file  # type: ignore[attr-defined]
+            mock_ns.output = "text"  # type: ignore[attr-defined]
+            mock_ns.output_file = None  # type: ignore[attr-defined]
             mock_parser = mock_parser_fn.return_value
             mock_parser.parse_args.return_value = mock_ns
             main()
 
         output = capsys.readouterr().out
         assert str(tmp_path) in output
+
+
+class TestOutputFormats:
+    """Tests for --output and --output-file CLI flags."""
+
+    def _make_scannable_dir(self, tmp_path: Path) -> tuple[Path, Path]:
+        """Create a simple scannable directory and config file.
+
+        Returns:
+            A tuple of (root directory, config file path).
+        """
+        root = tmp_path / "dev"
+        root.mkdir()
+        category = root / "tools"
+        category.mkdir()
+        project = category / "my-project"
+        project.mkdir()
+        (project / "main.py").write_text("")
+
+        config_file = tmp_path / "config.toml"
+        config_file.write_text('username = "testuser"\n')
+        return root, config_file
+
+    def test_json_to_default_file(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """--output json with no -f writes devfolder.json in CWD."""
+        root, config_file = self._make_scannable_dir(tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            patch(
+                "sys.argv",
+                ["devfolder", str(root), "--config", str(config_file), "-o", "json"],
+            ),
+            make_remote_patch({}),
+        ):
+            main()
+
+        output_file = tmp_path / "devfolder.json"
+        assert output_file.exists()
+        parsed = json.loads(output_file.read_text())
+        assert parsed["root"] == str(root)
+        assert isinstance(parsed["children"], list)
+
+        # Confirmation printed to stderr
+        captured = capsys.readouterr()
+        assert "devfolder.json" in captured.err
+        assert captured.out == ""
+
+    def test_json_to_explicit_file(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """--output json -f custom.json writes to the specified file."""
+        root, config_file = self._make_scannable_dir(tmp_path)
+        output_path = tmp_path / "custom.json"
+
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "devfolder",
+                    str(root),
+                    "--config",
+                    str(config_file),
+                    "-o",
+                    "json",
+                    "-f",
+                    str(output_path),
+                ],
+            ),
+            make_remote_patch({}),
+        ):
+            main()
+
+        assert output_path.exists()
+        parsed = json.loads(output_path.read_text())
+        assert parsed["root"] == str(root)
+
+        captured = capsys.readouterr()
+        assert str(output_path) in captured.err
+
+    def test_text_to_file(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Text output with -f writes the tree to a file."""
+        root, config_file = self._make_scannable_dir(tmp_path)
+        output_path = tmp_path / "tree.txt"
+
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "devfolder",
+                    str(root),
+                    "--config",
+                    str(config_file),
+                    "-f",
+                    str(output_path),
+                ],
+            ),
+            make_remote_patch({}),
+        ):
+            main()
+
+        assert output_path.exists()
+        content = output_path.read_text()
+        assert "tools/" in content
+        assert "my-project/" in content
+
+        captured = capsys.readouterr()
+        assert str(output_path) in captured.err
+        assert captured.out == ""
+
+    def test_text_to_stdout_unchanged(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Default text output still prints to stdout."""
+        root, config_file = self._make_scannable_dir(tmp_path)
+
+        with (
+            patch(
+                "sys.argv",
+                ["devfolder", str(root), "--config", str(config_file)],
+            ),
+            make_remote_patch({}),
+        ):
+            main()
+
+        captured = capsys.readouterr()
+        assert "tools/" in captured.out
+        assert captured.err == ""

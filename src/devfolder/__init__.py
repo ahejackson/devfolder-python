@@ -7,6 +7,7 @@ from pathlib import Path
 from .config import Config
 from .output import format_tree
 from .scanner import scan
+from .serializers import format_json
 
 __all__ = ["main"]
 
@@ -34,6 +35,20 @@ def create_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to config file (default: ~/.config/devfolder/config.toml)",
     )
+    parser.add_argument(
+        "--output",
+        "-o",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
+    )
+    parser.add_argument(
+        "--output-file",
+        "-f",
+        type=Path,
+        default=None,
+        help="Write output to a file instead of stdout",
+    )
     return parser
 
 
@@ -44,6 +59,8 @@ def main() -> None:
 
     root: Path = args.root
     config_path: Path | None = args.config
+    output_format: str = args.output
+    output_file: Path | None = args.output_file
 
     # Validate root path
     if not root.exists():
@@ -57,7 +74,21 @@ def main() -> None:
     # Load configuration
     config = Config.load(config_path)
 
-    # Scan and output
+    # Scan and format
     result = scan(root, config)
-    output = format_tree(result)
-    print(output)
+
+    if output_format == "json":
+        output = format_json(result)
+    else:
+        output = format_tree(result)
+
+    # Default JSON output to devfolder.json in CWD when no file specified
+    if output_format == "json" and output_file is None:
+        output_file = Path.cwd() / "devfolder.json"
+
+    # Write to file or stdout
+    if output_file is not None:
+        output_file.write_text(output + "\n")
+        print(f"Output written to {output_file}", file=sys.stderr)
+    else:
+        print(output)
