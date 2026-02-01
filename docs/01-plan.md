@@ -70,7 +70,7 @@ class ScanResult:
 
 ### Scanning Algorithm
 
-```
+```python
 scan(root):
     if root has .git:
         return ScanResult(root, [], is_project=True)
@@ -110,7 +110,7 @@ scan_category(category_path):
 
 ### Classification Logic
 
-```
+```python
 classify_project(path):
     if is_empty(path):
         return EMPTY

@@ -11,3 +11,8 @@ wheels/
 
 # Claude Code
 .claude/
+
+# Tool Caches
+.mypy_cache
+.ruff_cache
+.pytest_cache

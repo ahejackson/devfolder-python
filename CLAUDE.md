@@ -2,6 +2,14 @@
 
 A CLI tool to scan and categorize local development projects.
 
+## Instructions
+- Follow the Python code style guidelines in`@/docs/CODING-STYLE.md`
+- Use the `docs` folder to save markdown documents about the current state of the project, such as a "scratchpad"
+- Write all major progress reports as markdown files as well as outputting them to the console.
+- Progress report filenames should start with a zero-padded two digit number that increases sequentially to keep things organised - for example `01-plan.md`
+- Use `uv` to install any dependencies, not `pip`.
+- Support python 3.13 and up
+
 ## Quick Start
 
 ```bash
