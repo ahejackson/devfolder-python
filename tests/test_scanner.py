@@ -115,6 +115,40 @@ class TestScanCategory:
         assert isinstance(nm, IgnoredNode)
         assert nm.reason is IgnoreReason.NODE_MODULES
 
+    def test_category_skips_symlinked_files(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        """Symlinked files should be excluded, same as regular files."""
+        category = tmp_path / "tools"
+        category.mkdir()
+        target_file = tmp_path / "some-file.txt"
+        target_file.write_text("hello")
+        (category / "link-to-file").symlink_to(target_file)
+        (category / "project-a").mkdir()
+        (category / "project-a" / "main.py").write_text("")
+
+        children = scan_category(category, config)
+
+        assert len(children) == 1
+        assert children[0].name == "project-a"
+
+    def test_category_includes_symlinked_dirs(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        """Symlinked directories should appear as symlink nodes."""
+        category = tmp_path / "tools"
+        category.mkdir()
+        target_dir = tmp_path / "real-project"
+        target_dir.mkdir()
+        (category / "link-to-dir").symlink_to(target_dir)
+
+        children = scan_category(category, config)
+
+        assert len(children) == 1
+        assert children[0].kind is NodeKind.SYMLINK
+        assert isinstance(children[0], SymlinkNode)
+        assert children[0].name == "link-to-dir"
+
     def test_category_skips_files(
         self, tmp_path: Path, config: Config
     ) -> None:
@@ -264,6 +298,27 @@ class TestScan:
 
         names = [c.name for c in result.children]
         assert names == sorted(names, key=str.lower)
+
+    def test_symlinked_file_excluded(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        """Symlinked files at root level should be excluded from the tree."""
+        root = tmp_path / "dev"
+        root.mkdir()
+        target_file = tmp_path / "some-file.txt"
+        target_file.write_text("hello")
+        (root / "link-to-file").symlink_to(target_file)
+        # Add a symlinked directory too, to verify it IS included
+        target_dir = tmp_path / "real-project"
+        target_dir.mkdir()
+        (root / "link-to-dir").symlink_to(target_dir)
+
+        result = scan(root, config)
+
+        children_by_name = {c.name: c for c in result.children}
+        assert "link-to-file" not in children_by_name
+        assert "link-to-dir" in children_by_name
+        assert children_by_name["link-to-dir"].kind is NodeKind.SYMLINK
 
     def test_root_resolves_to_absolute(
         self, tmp_path: Path, config: Config

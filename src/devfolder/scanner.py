@@ -67,19 +67,20 @@ def scan_category(category_path: Path, config: Config) -> list[Node]:
         ]
 
     for entry in entries:
-        # Handle symlinks (don't follow them)
+        # Handle symlinks to directories (don't follow them)
         if entry.is_symlink():
-            try:
-                target = entry.resolve()
-            except OSError:
-                target = None
-            children.append(
-                SymlinkNode(
-                    name=entry.name,
-                    path=entry,
-                    target=target,
+            if entry.is_dir():
+                try:
+                    target = entry.resolve()
+                except OSError:
+                    target = None
+                children.append(
+                    SymlinkNode(
+                        name=entry.name,
+                        path=entry,
+                        target=target,
+                    )
                 )
-            )
             continue
 
         # Skip non-directories
@@ -170,19 +171,20 @@ def scan(root: Path, config: Config) -> ScanResult:
         )
 
     for entry in entries:
-        # Handle symlinks (don't follow them)
+        # Handle symlinks to directories (don't follow them)
         if entry.is_symlink():
-            try:
-                target = entry.resolve()
-            except OSError:
-                target = None
-            children.append(
-                SymlinkNode(
-                    name=entry.name,
-                    path=entry,
-                    target=target,
+            if entry.is_dir():
+                try:
+                    target = entry.resolve()
+                except OSError:
+                    target = None
+                children.append(
+                    SymlinkNode(
+                        name=entry.name,
+                        path=entry,
+                        target=target,
+                    )
                 )
-            )
             continue
 
         # Skip non-directories
