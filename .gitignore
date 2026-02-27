@@ -11,8 +11,12 @@ wheels/
 
 # Claude Code
 .claude/
+.claude.local.md
 
 # Tool Caches
 .mypy_cache
 .ruff_cache
 .pytest_cache
+
+# Devfolder Output
+devfolder.json

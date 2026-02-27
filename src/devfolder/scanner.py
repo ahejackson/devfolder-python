@@ -14,7 +14,7 @@ from .models import (
     SymlinkNode,
 )
 
-__all__ = ["scan", "scan_category", "should_ignore"]
+__all__ = ["is_nested_category", "scan", "scan_category", "should_ignore"]
 
 
 def should_ignore(entry: Path) -> IgnoreReason | None:
@@ -73,12 +73,56 @@ def _try_symlink_node(entry: Path) -> SymlinkNode | None:
     return SymlinkNode(name=entry.name, path=entry, target=target)
 
 
-def scan_category(category_path: Path, config: Config) -> list[Node]:
+def is_nested_category(path: Path) -> bool:
+    """Check if a directory should be treated as a nested category.
+
+    A directory is a nested category if:
+    1. It is not a git repository.
+    2. It contains only other directories (and possibly dotfiles).
+    3. At least one of its subdirectories is a git repository.
+
+    Args:
+        path: The directory to check.
+
+    Returns:
+        True if it's a nested category, False otherwise.
+    """
+    if has_git_directory(path):
+        return False
+
+    try:
+        entries = list(path.iterdir())
+        if not entries:
+            return False
+
+        has_git_child = False
+        for entry in entries:
+            # Ignore dotfiles
+            if entry.name.startswith("."):
+                continue
+
+            # If there's any non-directory, it's not a category
+            if not entry.is_dir():
+                return False
+
+            # Check if any child is a git repo
+            if has_git_directory(entry):
+                has_git_child = True
+
+        return has_git_child
+    except OSError:
+        return False
+
+
+def scan_category(
+    category_path: Path, config: Config, allow_nested: bool = True
+) -> list[Node]:
     """Scan a category directory for projects.
 
     Args:
         category_path: Path to the category directory.
         config: Configuration for classification.
+        allow_nested: Whether to allow nested categories.
 
     Returns:
         A list of nodes representing the category's contents.
@@ -111,6 +155,23 @@ def scan_category(category_path: Path, config: Config) -> list[Node]:
                 )
             )
             continue
+
+        # Check for nested category
+        if allow_nested and is_nested_category(entry):
+            try:
+                # Nested categories don't allow further nesting for now
+                category_children = scan_category(entry, config, allow_nested=False)
+                children.append(
+                    CategoryNode(
+                        name=entry.name,
+                        path=entry,
+                        children=tuple(category_children),
+                    )
+                )
+                continue
+            except OSError as e:
+                children.append(_make_error_node(entry, e))
+                continue
 
         # All other directories at this level are projects
         try:

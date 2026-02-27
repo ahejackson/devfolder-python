@@ -352,3 +352,85 @@ class TestScan:
         result = scan(root, config)
 
         assert len(result.children) == 0
+
+
+class TestNestedCategories:
+    """Tests for nested category detection."""
+
+    def test_nested_category_detected(self, tmp_path: Path, config: Config) -> None:
+        """
+        Test that a second-level folder is treated as a category if it contains git repos.
+        """
+        root = tmp_path / "dev"
+        root.mkdir()
+        work = root / "work"
+        work.mkdir()
+        misc = work / "misc"
+        misc.mkdir()
+        p1 = misc / "project-1"
+        p1.mkdir()
+        (p1 / ".git").mkdir()
+        dp = work / "direct-project"
+        dp.mkdir()
+        (dp / ".git").mkdir()
+
+        result = scan(root, config)
+
+        work_node = [c for c in result.children if c.name == "work"][0]
+        assert isinstance(work_node, CategoryNode)
+
+        work_children = {c.name: c for c in work_node.children}
+        assert "direct-project" in work_children
+        assert isinstance(work_children["direct-project"], ProjectNode)
+
+        assert "misc" in work_children
+        misc_node = work_children["misc"]
+        assert isinstance(misc_node, CategoryNode)
+
+        misc_children = {c.name: c for c in misc_node.children}
+        assert "project-1" in misc_children
+        assert isinstance(misc_children["project-1"], ProjectNode)
+
+    def test_not_nested_category_if_contains_files(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        """
+        If a second-level folder contains files, it should NOT be a category.
+        """
+        root = tmp_path / "dev"
+        root.mkdir()
+        work = root / "work"
+        work.mkdir()
+        nac = work / "not-a-cat"
+        nac.mkdir()
+        (nac / "file.txt").write_text("hello")
+        p1 = nac / "project-1"
+        p1.mkdir()
+        (p1 / ".git").mkdir()
+
+        result = scan(root, config)
+
+        work_node = result.children[0]
+        nac_node = work_node.children[0]
+        assert isinstance(nac_node, ProjectNode)
+
+    def test_nested_category_with_dotfiles(self, tmp_path: Path, config: Config) -> None:
+        """
+        Dotfiles like .DS_Store should NOT prevent a folder from being a nested category.
+        """
+        root = tmp_path / "dev"
+        root.mkdir()
+        work = root / "work"
+        work.mkdir()
+        misc = work / "misc"
+        misc.mkdir()
+        (misc / ".DS_Store").write_text("")
+        p1 = misc / "project-1"
+        p1.mkdir()
+        (p1 / ".git").mkdir()
+
+        result = scan(root, config)
+
+        work_node = result.children[0]
+        misc_node = work_node.children[0]
+        assert isinstance(misc_node, CategoryNode)
