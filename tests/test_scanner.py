@@ -357,10 +357,10 @@ class TestScan:
 class TestNestedCategories:
     """Tests for nested category detection."""
 
-    def test_nested_category_detected(self, tmp_path: Path, config: Config) -> None:
-        """
-        Test that a second-level folder is treated as a category if it contains git repos.
-        """
+    def test_nested_category_detected(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        """A second-level folder with git repos is treated as a category."""
         root = tmp_path / "dev"
         root.mkdir()
         work = root / "work"
@@ -411,13 +411,14 @@ class TestNestedCategories:
         result = scan(root, config)
 
         work_node = result.children[0]
+        assert isinstance(work_node, CategoryNode)
         nac_node = work_node.children[0]
         assert isinstance(nac_node, ProjectNode)
 
-    def test_nested_category_with_dotfiles(self, tmp_path: Path, config: Config) -> None:
-        """
-        Dotfiles like .DS_Store should NOT prevent a folder from being a nested category.
-        """
+    def test_nested_category_with_dotfiles(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        """Dotfiles like .DS_Store don't prevent a folder being a category."""
         root = tmp_path / "dev"
         root.mkdir()
         work = root / "work"
@@ -432,5 +433,6 @@ class TestNestedCategories:
         result = scan(root, config)
 
         work_node = result.children[0]
+        assert isinstance(work_node, CategoryNode)
         misc_node = work_node.children[0]
         assert isinstance(misc_node, CategoryNode)
