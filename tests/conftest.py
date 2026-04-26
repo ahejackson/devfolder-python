@@ -8,18 +8,19 @@ from unittest.mock import patch
 import pytest
 
 from devfolder.config import Config
+from devfolder.models import Owner
 
 
 @pytest.fixture(scope="session")
 def config() -> Config:
-    """A config with a test username."""
-    return Config(username="testuser")
+    """A config with a single GitHub owner used across most tests."""
+    return Config(owners=(Owner(name="testuser", host="github.com"),))
 
 
 @pytest.fixture(scope="session")
-def config_no_username() -> Config:
-    """A config with no username set."""
-    return Config(username=None)
+def config_no_owners() -> Config:
+    """A config with no owners configured."""
+    return Config()
 
 
 @pytest.fixture
@@ -51,9 +52,9 @@ def local_git_project(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def personal_remote_project(tmp_path: Path) -> Path:
-    """A git project with a remote matching the test username."""
-    d = tmp_path / "personal"
+def owned_remote_project(tmp_path: Path) -> Path:
+    """A git project with a remote matching the configured owner."""
+    d = tmp_path / "owned"
     d.mkdir()
     (d / ".git").mkdir()
     (d / "main.py").write_text("print('hello')")
@@ -62,7 +63,7 @@ def personal_remote_project(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def other_remote_project(tmp_path: Path) -> Path:
-    """A git project with a remote not matching the test username."""
+    """A git project with a remote not matching any configured owner."""
     d = tmp_path / "other"
     d.mkdir()
     (d / ".git").mkdir()

@@ -28,7 +28,9 @@ class TestMain:
         (project / "main.py").write_text("")
 
         config_file = tmp_path / "config.toml"
-        config_file.write_text('username = "testuser"\n')
+        config_file.write_text(
+            '[[owners]]\nname = "testuser"\nhost = "github.com"\n'
+        )
 
         with (
             patch(
@@ -89,6 +91,20 @@ class TestMain:
         ):
             main()
 
+    def test_version_flag(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """--version prints `devfolder <version>` to stdout and exits 0."""
+        from importlib.metadata import version
+
+        with (
+            patch("sys.argv", ["devfolder", "--version"]),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert captured.out.strip() == f"devfolder {version('devfolder')}"
+
     def test_default_root_is_cwd(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -135,7 +151,9 @@ class TestOutputFormats:
         (project / "main.py").write_text("")
 
         config_file = tmp_path / "config.toml"
-        config_file.write_text('username = "testuser"\n')
+        config_file.write_text(
+            '[[owners]]\nname = "testuser"\nhost = "github.com"\n'
+        )
         return root, config_file
 
     def test_json_to_default_file(

@@ -34,6 +34,7 @@ def node_to_dict(node: Node) -> dict[str, object]:
                 "path": str(node.path),
                 "project_type": node.project_type.value,
                 "remote_url": node.remote_url,
+                "owner": node.owner,
             }
 
         case NodeKind.CATEGORY:

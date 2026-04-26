@@ -33,7 +33,7 @@ class TestFormatProjectType:
             (ProjectType.EMPTY, "[empty]"),
             (ProjectType.LOCAL_UNTRACKED, "[local-untracked]"),
             (ProjectType.LOCAL_GIT, "[local-git]"),
-            (ProjectType.PERSONAL_REMOTE, "[personal-remote]"),
+            (ProjectType.OWNED_REMOTE, "[owned-remote]"),
             (ProjectType.OTHER_REMOTE, "[other-remote]"),
         ],
     )
@@ -41,6 +41,20 @@ class TestFormatProjectType:
         self, project_type: ProjectType, expected: str
     ) -> None:
         assert format_project_type(project_type) == expected
+
+    def test_owned_remote_with_owner_shows_inline(self) -> None:
+        """OWNED_REMOTE shows the matched owner inline."""
+        assert (
+            format_project_type(ProjectType.OWNED_REMOTE, owner="ahejackson")
+            == "[owned-remote: ahejackson]"
+        )
+
+    def test_owner_is_only_shown_for_owned_remote(self) -> None:
+        """The owner argument is ignored for non-OWNED_REMOTE types."""
+        assert (
+            format_project_type(ProjectType.OTHER_REMOTE, owner="ahejackson")
+            == "[other-remote]"
+        )
 
 
 # --- format_ignore_reason ---
@@ -84,13 +98,14 @@ class TestFormatNode:
         node = ProjectNode(
             name="my-project",
             path=base_path,
-            project_type=ProjectType.PERSONAL_REMOTE,
+            project_type=ProjectType.OWNED_REMOTE,
             remote_url="git@github.com:user/repo.git",
+            owner="user",
         )
         lines = format_node(node, prefix="", is_last=False)
 
         assert len(lines) == 1
-        assert "[personal-remote]" in lines[0]
+        assert "[owned-remote: user]" in lines[0]
         assert "git@github.com:user/repo.git" in lines[0]
         assert lines[0].startswith("├──")
 
@@ -267,8 +282,9 @@ class TestFormatTree:
         root_project = ProjectNode(
             name="my-project",
             path=tmp_path,
-            project_type=ProjectType.PERSONAL_REMOTE,
+            project_type=ProjectType.OWNED_REMOTE,
             remote_url="git@github.com:user/repo.git",
+            owner="user",
         )
         result = ScanResult(
             root=tmp_path,
@@ -277,7 +293,7 @@ class TestFormatTree:
         )
         output = format_tree(result)
 
-        assert "[personal-remote]" in output
+        assert "[owned-remote: user]" in output
         assert "git@github.com:user/repo.git" in output
 
     def test_non_project_root(self, tmp_path: Path) -> None:

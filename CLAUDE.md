@@ -47,8 +47,8 @@ src/devfolder/
 1. **Empty**: Project folder with no contents
 2. **Local Untracked**: No `.git` folder
 3. **Local Git**: Has `.git` but no remotes
-4. **Personal Remote**: Remote URL contains configured username
-5. **Other Remote**: Has remote(s) not matching username
+4. **Owned Remote**: Remote URL matches a configured owner (host + name)
+5. **Other Remote**: Has remote(s) not matching any configured owner
 
 
 ## Configuration
@@ -56,8 +56,16 @@ src/devfolder/
 Config file: `~/.config/devfolder/config.toml`
 
 ```toml
-username = "ahejackson"
+[[owners]]
+name = "ahejackson"
+host = "github.com"
+
+[[owners]]
+name = "my-org"
+host = "github.com"
 ```
+
+Each owner is a `(host, name)` pair. Strict matching: both must match for a remote to count as owned.
 
 
 ## Commands

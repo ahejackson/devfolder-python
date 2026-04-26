@@ -22,15 +22,18 @@ ELBOW = "└"
 DASH = "──"
 
 
-def format_project_type(project_type: ProjectType) -> str:
+def format_project_type(project_type: ProjectType, owner: str | None = None) -> str:
     """Format a project type for display.
 
     Args:
         project_type: The project type to format.
+        owner: The matched owner name, shown inline for OWNED_REMOTE projects.
 
     Returns:
         A formatted string for the project type.
     """
+    if project_type is ProjectType.OWNED_REMOTE and owner is not None:
+        return f"[{project_type.value}: {owner}]"
     return f"[{project_type.value}]"
 
 
@@ -70,7 +73,7 @@ def format_node(node: Node, prefix: str = "", is_last: bool = True) -> list[str]
     match node.kind:
         case NodeKind.PROJECT:
             assert isinstance(node, ProjectNode)
-            type_str = format_project_type(node.project_type)
+            type_str = format_project_type(node.project_type, node.owner)
             remote_str = f" {node.remote_url}" if node.remote_url else ""
             line = f"{prefix}{connector}{DASH} {node.name}/ {type_str}{remote_str}"
             lines.append(line)
@@ -119,7 +122,9 @@ def format_tree(result: ScanResult) -> str:
     # Root line
     if result.is_root_project:
         assert result.root_project is not None
-        type_str = format_project_type(result.root_project.project_type)
+        type_str = format_project_type(
+            result.root_project.project_type, result.root_project.owner
+        )
         remote_str = (
             f" {result.root_project.remote_url}"
             if result.root_project.remote_url

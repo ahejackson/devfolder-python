@@ -1,0 +1,39 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.2.0] - 2026-04-26
+
+### Added
+- `--version` flag prints `devfolder <version>` and exits.
+- `owner` field on project records, holding the matched owner name (from the configured `owners` list).
+- Owner appears inline in tree output: `[owned-remote: <name>]`.
+
+### Changed
+- **BREAKING**: Replaced the `username` config field with an `owners` array of tables. Each entry has a `name` and `host`. Multiple owners across multiple hosts are now supported (e.g. personal GitHub account + GitHub orgs + a historical GitLab account).
+- **BREAKING**: Renamed project type `personal-remote` → `owned-remote`. Affects both tree output and JSON serialization.
+- Owner matching now requires both host and name to match strictly. Previously a name match on any host would classify as personal-remote.
+
+### Migration
+Replace `username = "yourname"` in `~/.config/devfolder/config.toml` with:
+
+```toml
+[[owners]]
+name = "yourname"
+host = "github.com"
+```
+
+## [0.1.0] - 2026-04-26
+
+### Added
+- Initial CLI: scan a directory tree, classify projects by git status, and output a tree view.
+- Project classifications: `EMPTY`, `LOCAL_UNTRACKED`, `LOCAL_GIT`, `PERSONAL_REMOTE`, `OTHER_REMOTE`.
+- Configuration via `~/.config/devfolder/config.toml` (`username` field).
+- JSON output format (`-o json`) and file output (`-f <path>`).
+- Support for nested project categories (one level deep).
+- Pytest test suite covering classifier, scanner, output, and CLI.

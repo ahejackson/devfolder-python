@@ -11,59 +11,163 @@ from devfolder.classifier import (
     get_git_remotes,
     has_git_directory,
     is_empty_directory,
-    username_in_remote_url,
+    match_owner,
+    parse_remote_url,
 )
 from devfolder.config import Config
-from devfolder.models import ProjectType
+from devfolder.models import Owner, ProjectType
 
 from .conftest import make_remote_patch
 
-# --- username_in_remote_url ---
+# --- parse_remote_url ---
 
 
-class TestUsernameInRemoteUrl:
-    """Tests for username matching across URL formats."""
+class TestParseRemoteUrl:
+    """Tests for URL parsing across formats."""
 
     @pytest.mark.parametrize(
-        ("url", "username", "expected"),
+        ("url", "expected"),
         [
-            # SSH format
-            ("git@github.com:testuser/repo.git", "testuser", True),
-            ("git@github.com:otheruser/repo.git", "testuser", False),
-            ("git@gitlab.com:testuser/repo.git", "testuser", True),
-            # HTTPS format
-            ("https://github.com/testuser/repo.git", "testuser", True),
-            ("https://github.com/otheruser/repo.git", "testuser", False),
-            ("https://gitlab.com/testuser/repo.git", "testuser", True),
-            # git:// format
-            ("git://github.com/testuser/repo.git", "testuser", True),
-            ("git://github.com/otheruser/repo.git", "testuser", False),
-            # Case insensitive
-            ("git@github.com:TestUser/repo.git", "testuser", True),
-            ("https://github.com/TESTUSER/repo.git", "testuser", True),
-            # Partial matches should not match
-            ("git@github.com:testuser2/repo.git", "testuser", False),
-            ("https://github.com/nottestuser/repo.git", "testuser", False),
+            # SSH
+            ("git@github.com:owner/repo.git", ("github.com", "owner")),
+            ("git@gitlab.com:owner/repo.git", ("gitlab.com", "owner")),
+            ("git@github.com:org-name/some-repo.git", ("github.com", "org-name")),
+            # HTTPS
+            ("https://github.com/owner/repo.git", ("github.com", "owner")),
+            ("https://gitlab.com/owner/repo.git", ("gitlab.com", "owner")),
+            ("http://example.com/owner/repo", ("example.com", "owner")),
+            # git://
+            ("git://github.com/owner/repo.git", ("github.com", "owner")),
+            # Trailing slash variations
+            ("https://github.com/owner/repo", ("github.com", "owner")),
         ],
         ids=[
-            "ssh-match",
-            "ssh-no-match",
+            "ssh-github",
             "ssh-gitlab",
-            "https-match",
-            "https-no-match",
+            "ssh-org-name",
+            "https-github",
             "https-gitlab",
-            "git-proto-match",
-            "git-proto-no-match",
-            "ssh-case-insensitive",
-            "https-case-insensitive",
-            "ssh-partial-no-match",
-            "https-partial-no-match",
+            "http-plain",
+            "git-proto",
+            "https-no-suffix",
         ],
     )
-    def test_url_matching(
-        self, url: str, username: str, expected: bool
+    def test_parses_valid_urls(
+        self, url: str, expected: tuple[str, str]
     ) -> None:
-        assert username_in_remote_url(url, username) is expected
+        assert parse_remote_url(url) == expected
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "",
+            "not-a-url",
+            "git@",
+            "https://",
+            "https://github.com",
+            "https://github.com/",
+            "git@github.com",
+        ],
+        ids=[
+            "empty",
+            "no-scheme",
+            "ssh-no-host",
+            "https-no-host",
+            "https-host-only",
+            "https-host-trailing-slash",
+            "ssh-no-path",
+        ],
+    )
+    def test_rejects_invalid_urls(self, url: str) -> None:
+        assert parse_remote_url(url) is None
+
+
+# --- match_owner ---
+
+
+class TestMatchOwner:
+    """Tests for owner matching against URLs."""
+
+    @pytest.mark.parametrize(
+        ("url", "expected"),
+        [
+            # Personal account on GitHub — matches.
+            ("git@github.com:me/repo.git", "me"),
+            ("https://github.com/me/repo.git", "me"),
+            ("git://github.com/me/repo.git", "me"),
+            # GitHub org — matches.
+            ("git@github.com:my-org/repo.git", "my-org"),
+            ("https://github.com/my-org/repo.git", "my-org"),
+            # GitLab account — matches.
+            ("git@gitlab.com:old-me/repo.git", "old-me"),
+            ("https://gitlab.com/old-me/repo.git", "old-me"),
+            # Case insensitive.
+            ("git@github.com:ME/repo.git", "me"),
+            ("https://GITHUB.COM/me/repo.git", "me"),
+        ],
+        ids=[
+            "ssh-personal-github",
+            "https-personal-github",
+            "git-proto-personal-github",
+            "ssh-org-github",
+            "https-org-github",
+            "ssh-gitlab",
+            "https-gitlab",
+            "ssh-case-insensitive-name",
+            "https-case-insensitive-host",
+        ],
+    )
+    def test_matches(self, url: str, expected: str) -> None:
+        owners = (
+            Owner(name="me", host="github.com"),
+            Owner(name="my-org", host="github.com"),
+            Owner(name="old-me", host="gitlab.com"),
+        )
+        assert match_owner(url, owners) == expected
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            # Right name, wrong host.
+            "git@gitlab.com:me/repo.git",
+            "https://gitlab.com/me/repo.git",
+            # Right host, wrong name.
+            "git@github.com:somebody-else/repo.git",
+            "https://github.com/somebody-else/repo.git",
+            # Wrong host AND wrong name.
+            "git@bitbucket.org:somebody/repo.git",
+            # Partial-name false positive guard.
+            "git@github.com:me-too/repo.git",
+            "https://github.com/not-me/repo.git",
+        ],
+        ids=[
+            "ssh-name-wrong-host",
+            "https-name-wrong-host",
+            "ssh-host-wrong-name",
+            "https-host-wrong-name",
+            "ssh-both-wrong",
+            "ssh-partial-prefix",
+            "https-partial-suffix",
+        ],
+    )
+    def test_no_match(self, url: str) -> None:
+        owners = (
+            Owner(name="me", host="github.com"),
+            Owner(name="old-me", host="gitlab.com"),
+        )
+        assert match_owner(url, owners) is None
+
+    def test_empty_owners_never_matches(self) -> None:
+        assert match_owner("git@github.com:me/repo.git", ()) is None
+
+    def test_unparseable_url_returns_none(self) -> None:
+        owners = (Owner(name="me", host="github.com"),)
+        assert match_owner("not-a-url", owners) is None
+
+    def test_returns_configured_casing(self) -> None:
+        """The returned name uses the casing from config, not the URL."""
+        owners = (Owner(name="MyOrg", host="github.com"),)
+        assert match_owner("git@github.com:myorg/repo.git", owners) == "MyOrg"
 
 
 # --- is_empty_directory ---
@@ -118,6 +222,7 @@ class TestClassifyProject:
         result = classify_project(empty_dir, config)
         assert result.project_type is ProjectType.EMPTY
         assert result.remote_url is None
+        assert result.owner is None
         assert result.name == "empty-project"
 
     def test_untracked_project(
@@ -126,6 +231,7 @@ class TestClassifyProject:
         result = classify_project(untracked_project, config)
         assert result.project_type is ProjectType.LOCAL_UNTRACKED
         assert result.remote_url is None
+        assert result.owner is None
 
     def test_local_git_project(
         self, local_git_project: Path, config: Config
@@ -134,15 +240,17 @@ class TestClassifyProject:
             result = classify_project(local_git_project, config)
         assert result.project_type is ProjectType.LOCAL_GIT
         assert result.remote_url is None
+        assert result.owner is None
 
-    def test_personal_remote_project(
-        self, personal_remote_project: Path, config: Config
+    def test_owned_remote_project(
+        self, owned_remote_project: Path, config: Config
     ) -> None:
         remotes = {"origin": "git@github.com:testuser/repo.git"}
         with make_remote_patch(remotes):
-            result = classify_project(personal_remote_project, config)
-        assert result.project_type is ProjectType.PERSONAL_REMOTE
+            result = classify_project(owned_remote_project, config)
+        assert result.project_type is ProjectType.OWNED_REMOTE
         assert result.remote_url == "git@github.com:testuser/repo.git"
+        assert result.owner == "testuser"
 
     def test_other_remote_project(
         self, other_remote_project: Path, config: Config
@@ -152,22 +260,34 @@ class TestClassifyProject:
             result = classify_project(other_remote_project, config)
         assert result.project_type is ProjectType.OTHER_REMOTE
         assert result.remote_url == "git@github.com:someone/repo.git"
+        assert result.owner is None
 
-    def test_no_username_configured(
+    def test_no_owners_configured(
         self,
-        personal_remote_project: Path,
-        config_no_username: Config,
+        owned_remote_project: Path,
+        config_no_owners: Config,
     ) -> None:
-        """With no username in config, all remote projects are 'other'."""
+        """With no owners in config, all remote projects are 'other'."""
         remotes = {"origin": "git@github.com:testuser/repo.git"}
         with make_remote_patch(remotes):
             result = classify_project(
-                personal_remote_project, config_no_username
+                owned_remote_project, config_no_owners
             )
         assert result.project_type is ProjectType.OTHER_REMOTE
+        assert result.owner is None
+
+    def test_matching_name_wrong_host_is_other_remote(
+        self, owned_remote_project: Path, config: Config
+    ) -> None:
+        """A matching owner name on the wrong host doesn't classify as owned."""
+        remotes = {"origin": "git@gitlab.com:testuser/repo.git"}
+        with make_remote_patch(remotes):
+            result = classify_project(owned_remote_project, config)
+        assert result.project_type is ProjectType.OTHER_REMOTE
+        assert result.owner is None
 
     def test_origin_preferred_over_other_remotes(
-        self, personal_remote_project: Path, config: Config
+        self, owned_remote_project: Path, config: Config
     ) -> None:
         """When origin exists, it should be used for classification."""
         remotes = {
@@ -175,18 +295,18 @@ class TestClassifyProject:
             "origin": "git@github.com:testuser/repo.git",
         }
         with make_remote_patch(remotes):
-            result = classify_project(personal_remote_project, config)
-        assert result.project_type is ProjectType.PERSONAL_REMOTE
+            result = classify_project(owned_remote_project, config)
+        assert result.project_type is ProjectType.OWNED_REMOTE
         assert result.remote_url == "git@github.com:testuser/repo.git"
 
     def test_fallback_to_first_remote_when_no_origin(
-        self, personal_remote_project: Path, config: Config
+        self, owned_remote_project: Path, config: Config
     ) -> None:
         """When no origin, use the first available remote."""
         remotes = {"upstream": "git@github.com:testuser/repo.git"}
         with make_remote_patch(remotes):
-            result = classify_project(personal_remote_project, config)
-        assert result.project_type is ProjectType.PERSONAL_REMOTE
+            result = classify_project(owned_remote_project, config)
+        assert result.project_type is ProjectType.OWNED_REMOTE
 
     def test_project_path_preserved(
         self, empty_dir: Path, config: Config

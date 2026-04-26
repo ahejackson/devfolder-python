@@ -1,8 +1,11 @@
 """Configuration loading for devfolder."""
 
+import sys
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+from .models import Owner
 
 __all__ = ["Config"]
 
@@ -11,7 +14,7 @@ __all__ = ["Config"]
 class Config:
     """Configuration for devfolder."""
 
-    username: str | None = None
+    owners: tuple[Owner, ...] = field(default_factory=tuple)
 
     @classmethod
     def default_path(cls) -> Path:
@@ -39,8 +42,52 @@ class Config:
         except (OSError, tomllib.TOMLDecodeError):
             return cls()
 
-        username = data.get("username")
-        if username is not None and not isinstance(username, str):
-            return cls()
+        owners = _parse_owners(data.get("owners"), config_path)
+        return cls(owners=owners)
 
-        return cls(username=username)
+
+def _parse_owners(raw: object, config_path: Path) -> tuple[Owner, ...]:
+    """Parse the `owners` array from config data.
+
+    Malformed entries are skipped with a warning; valid entries are kept.
+
+    Args:
+        raw: The raw value of the `owners` key from TOML.
+        config_path: The config file path, for warning messages.
+
+    Returns:
+        A tuple of valid Owner records.
+    """
+    if raw is None:
+        return ()
+
+    if not isinstance(raw, list):
+        print(
+            f"warning: {config_path}: 'owners' must be an array of tables, "
+            f"got {type(raw).__name__}; ignoring",
+            file=sys.stderr,
+        )
+        return ()
+
+    owners: list[Owner] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            print(
+                f"warning: {config_path}: owners[{i}] is not a table; skipping",
+                file=sys.stderr,
+            )
+            continue
+
+        name = entry.get("name")
+        host = entry.get("host")
+        if not isinstance(name, str) or not isinstance(host, str):
+            print(
+                f"warning: {config_path}: owners[{i}] requires string "
+                f"'name' and 'host' fields; skipping",
+                file=sys.stderr,
+            )
+            continue
+
+        owners.append(Owner(name=name, host=host))
+
+    return tuple(owners)

@@ -20,7 +20,7 @@ class TestNodeToDict:
     """Tests for node_to_dict()."""
 
     def test_project_node(self) -> None:
-        """A project node includes kind, name, path, project_type, and remote_url."""
+        """A project node includes kind, name, path, project_type, remote_url, owner."""
         node = ProjectNode(
             name="my-tool",
             path=Path("/dev/tools/my-tool"),
@@ -33,19 +33,22 @@ class TestNodeToDict:
             "path": "/dev/tools/my-tool",
             "project_type": "local-git",
             "remote_url": None,
+            "owner": None,
         }
 
     def test_project_node_with_remote(self) -> None:
-        """A project node with a remote URL includes it in the output."""
+        """A project node with a remote URL and owner includes both in the output."""
         node = ProjectNode(
             name="my-tool",
             path=Path("/dev/tools/my-tool"),
-            project_type=ProjectType.PERSONAL_REMOTE,
+            project_type=ProjectType.OWNED_REMOTE,
             remote_url="git@github.com:user/my-tool.git",
+            owner="user",
         )
         result = node_to_dict(node)
         assert result["remote_url"] == "git@github.com:user/my-tool.git"
-        assert result["project_type"] == "personal-remote"
+        assert result["project_type"] == "owned-remote"
+        assert result["owner"] == "user"
 
     def test_category_node(self) -> None:
         """A category node includes kind, name, path, is_empty, and children."""
@@ -197,8 +200,9 @@ class TestFormatJson:
         child_proj = ProjectNode(
             name="my-tool",
             path=Path("/dev/tools/my-tool"),
-            project_type=ProjectType.PERSONAL_REMOTE,
+            project_type=ProjectType.OWNED_REMOTE,
             remote_url="git@github.com:user/my-tool.git",
+            owner="user",
         )
         category = CategoryNode(
             name="tools",

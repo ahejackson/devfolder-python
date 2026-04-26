@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+from importlib.metadata import version
 from pathlib import Path
 
 from .config import Config
@@ -21,6 +22,11 @@ def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="devfolder",
         description="Scan and categorize local development projects",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {version('devfolder')}",
     )
     parser.add_argument(
         "root",

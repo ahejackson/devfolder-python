@@ -11,6 +11,7 @@ __all__ = [
     "IgnoreReason",
     "Node",
     "NodeKind",
+    "Owner",
     "ProjectNode",
     "ProjectType",
     "ScanResult",
@@ -34,8 +35,16 @@ class ProjectType(Enum):
     EMPTY = "empty"
     LOCAL_UNTRACKED = "local-untracked"
     LOCAL_GIT = "local-git"
-    PERSONAL_REMOTE = "personal-remote"
+    OWNED_REMOTE = "owned-remote"
     OTHER_REMOTE = "other-remote"
+
+
+@dataclass(frozen=True)
+class Owner:
+    """A remote owner identity (host + name) used for project classification."""
+
+    name: str
+    host: str
 
 
 class IgnoreReason(Enum):
@@ -60,6 +69,7 @@ class ProjectNode(Node):
 
     project_type: ProjectType
     remote_url: str | None = None
+    owner: str | None = None
 
     def __init__(
         self,
@@ -67,12 +77,14 @@ class ProjectNode(Node):
         path: Path,
         project_type: ProjectType,
         remote_url: str | None = None,
+        owner: str | None = None,
     ) -> None:
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "path", path)
         object.__setattr__(self, "kind", NodeKind.PROJECT)
         object.__setattr__(self, "project_type", project_type)
         object.__setattr__(self, "remote_url", remote_url)
+        object.__setattr__(self, "owner", owner)
 
 
 @dataclass(frozen=True)
