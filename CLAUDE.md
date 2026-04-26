@@ -3,17 +3,6 @@
 A CLI tool to scan and categorize local development projects.
 
 
-## Issue Tracking
-
-This project uses **bd (beads)** for issue tracking. Run `bd prime` for workflow context.
-
-**Quick reference:**
-- `bd ready` - Find unblocked work
-- `bd create "Title" --type task --priority 2` - Create issue
-- `bd close <id>` - Complete work
-- `bd sync` - Sync with git (run at session end)
-
-
 ## Instructions
 - Follow the Python code style guidelines in `@/docs/CODING-STYLE.md
 - Use `uv` to install any dependencies, not `pip`.
@@ -79,14 +68,3 @@ uv run pytest            # Run tests
 uv run mypy src tests    # Type checking
 uv run ruff check src tests  # Linting
 ```
-
-
-## Future Considerations
-
-- [ ] Option to list all remotes for a project
-- [ ] Separate usernames per git service (GitHub, GitLab, etc.)
-- [ ] Option to include bare git repositories
-- [ ] Flag to include/exclude dotfolders
-- [ ] More sophisticated ignore patterns
-- [ ] Git operations: fetch, push, pull
-- [x] Alternative output formats (JSON, etc.)

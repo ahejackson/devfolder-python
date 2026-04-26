@@ -11,7 +11,10 @@ wheels/
 
 # Claude Code
 .claude/
-.claude.local.md
+CLAUDE.local.md
+
+# Issue Tracking
+.beads
 
 # Tool Caches
 .mypy_cache
