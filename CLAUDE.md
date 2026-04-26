@@ -12,11 +12,11 @@ A CLI tool to scan and categorize local development projects.
 ## Quick Start
 
 ```bash
-uv run devfolder              # Scan current directory
-uv run devfolder ~/dev        # Scan specific directory
-uv run devfolder ~/dev -o json          # Write JSON to devfolder.json in CWD
-uv run devfolder ~/dev -o json -f out.json  # Write JSON to specific file
-uv run devfolder ~/dev -f tree.txt      # Write text output to file
+uv run devfolder scan              # Scan current directory
+uv run devfolder scan ~/dev        # Scan specific directory
+uv run devfolder scan ~/dev -o json          # Write JSON to devfolder.json in CWD
+uv run devfolder scan ~/dev -o json -f out.json  # Write JSON to specific file
+uv run devfolder scan ~/dev -f tree.txt      # Write text output to file
 ```
 
 
@@ -24,7 +24,8 @@ uv run devfolder ~/dev -f tree.txt      # Write text output to file
 
 ```
 src/devfolder/
-├── __init__.py      # CLI entry point
+├── __init__.py      # Package entry point (re-exports `main`)
+├── cli.py           # CLI dispatch and subcommand parsers
 ├── scanner.py       # Directory scanning logic
 ├── models.py        # Data classes and enums
 ├── classifier.py    # Project classification
@@ -71,7 +72,7 @@ Each owner is a `(host, name)` pair. Strict matching: both must match for a remo
 ## Commands
 
 ```bash
-uv run devfolder         # Run the tool
+uv run devfolder scan    # Run the tool
 uv run pytest            # Run tests
 uv run mypy src tests    # Type checking
 uv run ruff check src tests  # Linting

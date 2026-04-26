@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Breaking:** CLI restructured around subcommands. The previous bare invocation (`devfolder ~/dev`) is replaced with `devfolder scan ~/dev`. Run `devfolder --help` to see available subcommands.
+
 ## [0.2.1] - 2026-04-26
 
 ### Added

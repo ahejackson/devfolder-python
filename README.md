@@ -5,19 +5,21 @@ A CLI tool to scan and categorize local development projects.
 ## Quick Start
 
 ```sh
-uv run devfolder              # Scan current directory
-uv run devfolder ~/dev        # Scan specific directory
+uv run devfolder scan              # Scan current directory
+uv run devfolder scan ~/dev        # Scan specific directory
 ```
 
 ## Project Structure
 
 ```
 src/devfolder/
-├── __init__.py      # CLI entry point
+├── __init__.py      # Package entry point (re-exports `main`)
+├── cli.py           # CLI dispatch and subcommand parsers
 ├── scanner.py       # Directory scanning logic
 ├── models.py        # Data classes and enums
 ├── classifier.py    # Project classification
 ├── output.py        # Tree view formatting
+├── serializers.py   # JSON serialization
 └── config.py        # Configuration loading
 ```
 
@@ -48,8 +50,8 @@ username = "ahejackson"
 ## Commands
 
 ```sh
-uv run devfolder         # Run the tool
+uv run devfolder scan    # Run the tool
 uv run pytest            # Run tests
-uv run mypy src          # Type checking
-uv run ruff check src    # Linting
+uv run mypy src tests    # Type checking
+uv run ruff check src tests  # Linting
 ```
