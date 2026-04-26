@@ -1,14 +1,11 @@
 """Tests for devfolder.classifier module."""
 
-import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from devfolder.classifier import (
     classify_project,
-    get_git_remotes,
     has_git_directory,
     is_empty_directory,
     match_owner,
@@ -315,90 +312,5 @@ class TestClassifyProject:
         assert result.path == empty_dir
 
 
-# --- get_git_remotes ---
-
-
-class TestGetGitRemotes:
-    """Tests for git remote parsing."""
-
-    def _mock_run(self, stdout: str, returncode: int = 0) -> MagicMock:
-        """Create a mock for subprocess.run.
-
-        Args:
-            stdout: The stdout content to return.
-            returncode: The return code to simulate.
-
-        Returns:
-            A configured MagicMock.
-        """
-        mock_result = MagicMock()
-        mock_result.stdout = stdout
-        mock_result.returncode = returncode
-        return mock_result
-
-    def test_single_remote(self, tmp_path: Path) -> None:
-        stdout = (
-            "origin\tgit@github.com:user/repo.git (fetch)\n"
-            "origin\tgit@github.com:user/repo.git (push)\n"
-        )
-        with patch("subprocess.run", return_value=self._mock_run(stdout)):
-            remotes = get_git_remotes(tmp_path)
-
-        assert remotes == {"origin": "git@github.com:user/repo.git"}
-
-    def test_multiple_remotes(self, tmp_path: Path) -> None:
-        stdout = (
-            "origin\tgit@github.com:user/repo.git (fetch)\n"
-            "origin\tgit@github.com:user/repo.git (push)\n"
-            "upstream\thttps://github.com/org/repo.git (fetch)\n"
-            "upstream\thttps://github.com/org/repo.git (push)\n"
-        )
-        with patch("subprocess.run", return_value=self._mock_run(stdout)):
-            remotes = get_git_remotes(tmp_path)
-
-        assert remotes == {
-            "origin": "git@github.com:user/repo.git",
-            "upstream": "https://github.com/org/repo.git",
-        }
-
-    def test_prefers_fetch_over_push(self, tmp_path: Path) -> None:
-        """When fetch and push URLs differ, use the fetch URL."""
-        stdout = (
-            "origin\tgit@github.com:user/repo.git (fetch)\n"
-            "origin\tgit@github.com:user/repo-push.git (push)\n"
-        )
-        with patch("subprocess.run", return_value=self._mock_run(stdout)):
-            remotes = get_git_remotes(tmp_path)
-
-        assert remotes["origin"] == "git@github.com:user/repo.git"
-
-    def test_empty_output(self, tmp_path: Path) -> None:
-        with patch("subprocess.run", return_value=self._mock_run("")):
-            remotes = get_git_remotes(tmp_path)
-
-        assert remotes == {}
-
-    def test_nonzero_return_code(self, tmp_path: Path) -> None:
-        mock = self._mock_run("", returncode=128)
-        with patch("subprocess.run", return_value=mock):
-            remotes = get_git_remotes(tmp_path)
-
-        assert remotes == {}
-
-    def test_subprocess_error(self, tmp_path: Path) -> None:
-        with patch(
-            "subprocess.run",
-            side_effect=subprocess.SubprocessError("git not found"),
-        ):
-            remotes = get_git_remotes(tmp_path)
-
-        assert remotes == {}
-
-    def test_os_error(self, tmp_path: Path) -> None:
-        with patch(
-            "subprocess.run",
-            side_effect=OSError("no such file"),
-        ):
-            remotes = get_git_remotes(tmp_path)
-
-        assert remotes == {}
+# get_git_remotes tests live in tests/test_git.py since the function
+# now lives in devfolder.git.

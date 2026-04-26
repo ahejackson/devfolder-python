@@ -1,9 +1,9 @@
 """Project classification logic for devfolder."""
 
-import subprocess
 from pathlib import Path
 
 from .config import Config
+from .git import get_git_remotes
 from .models import Owner, ProjectNode, ProjectType
 
 __all__ = [
@@ -14,40 +14,6 @@ __all__ = [
     "match_owner",
     "parse_remote_url",
 ]
-
-
-def get_git_remotes(path: Path) -> dict[str, str]:
-    """Get all git remotes for a repository.
-
-    Args:
-        path: Path to the git repository.
-
-    Returns:
-        A dictionary mapping remote names to their URLs.
-    """
-    try:
-        result = subprocess.run(
-            ["git", "remote", "-v"],
-            cwd=path,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            return {}
-
-        remotes: dict[str, str] = {}
-        for line in result.stdout.strip().split("\n"):
-            if not line:
-                continue
-            parts = line.split()
-            if len(parts) >= 2 and parts[0] not in remotes:
-                # Only take the first occurrence (fetch, not push)
-                remotes[parts[0]] = parts[1]
-
-        return remotes
-    except (OSError, subprocess.SubprocessError):
-        return {}
 
 
 def parse_remote_url(url: str) -> tuple[str, str] | None:
