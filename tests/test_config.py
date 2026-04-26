@@ -79,10 +79,10 @@ class TestConfig:
 
         assert config.owners == ()
 
-    def test_load_config_with_extra_keys(
-        self, tmp_path: Path
+    def test_load_config_with_extra_keys_warns(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """Extra top-level keys are ignored."""
+        """Unknown top-level keys are accepted but produce a warning."""
         config_file = tmp_path / "config.toml"
         config_file.write_text(
             "unknown_key = \"value\"\n"
@@ -92,6 +92,48 @@ class TestConfig:
         config = Config.load(config_file)
 
         assert config.owners == (Owner(name="me", host="github.com"),)
+        captured = capsys.readouterr()
+        assert "unknown_key" in captured.err
+        assert "warning" in captured.err
+
+    def test_load_legacy_username_key_warns(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The pre-0.2.0 `username` key is flagged as unknown, not silently ignored."""
+        config_file = tmp_path / "config.toml"
+        config_file.write_text("username = \"ahejackson\"\n")
+
+        config = Config.load(config_file)
+
+        assert config.owners == ()
+        captured = capsys.readouterr()
+        assert "username" in captured.err
+        assert "[[owners]]" in captured.err
+
+    def test_load_no_owners_warns_when_file_exists(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """An existing config file that yields zero owners produces a warning."""
+        config_file = tmp_path / "config.toml"
+        config_file.write_text("")
+
+        config = Config.load(config_file)
+
+        assert config.owners == ()
+        captured = capsys.readouterr()
+        assert "no [[owners]] configured" in captured.err
+
+    def test_load_missing_config_does_not_warn(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A missing config file is a fresh-install state and stays silent."""
+        missing = tmp_path / "nonexistent.toml"
+
+        config = Config.load(missing)
+
+        assert config.owners == ()
+        captured = capsys.readouterr()
+        assert captured.err == ""
 
     def test_load_owners_not_an_array_warns_and_returns_empty(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]

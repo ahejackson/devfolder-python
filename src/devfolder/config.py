@@ -9,6 +9,8 @@ from .models import Owner
 
 __all__ = ["Config"]
 
+_KNOWN_TOP_LEVEL_KEYS = frozenset({"owners"})
+
 
 @dataclass(frozen=True)
 class Config:
@@ -42,8 +44,32 @@ class Config:
         except (OSError, tomllib.TOMLDecodeError):
             return cls()
 
+        _warn_unknown_top_level_keys(data, config_path)
         owners = _parse_owners(data.get("owners"), config_path)
+        if not owners:
+            print(
+                f"warning: {config_path}: no [[owners]] configured; "
+                f"all remote projects will classify as 'other-remote'",
+                file=sys.stderr,
+            )
         return cls(owners=owners)
+
+
+def _warn_unknown_top_level_keys(
+    data: dict[str, object], config_path: Path
+) -> None:
+    """Warn for any top-level keys that aren't part of the schema.
+
+    Catches stale configs (e.g. the pre-0.2.0 `username` key) that would
+    otherwise be silently ignored.
+    """
+    for key in data:
+        if key not in _KNOWN_TOP_LEVEL_KEYS:
+            print(
+                f"warning: {config_path}: ignoring unknown top-level key "
+                f"{key!r}; expected '[[owners]]' array of tables",
+                file=sys.stderr,
+            )
 
 
 def _parse_owners(raw: object, config_path: Path) -> tuple[Owner, ...]:

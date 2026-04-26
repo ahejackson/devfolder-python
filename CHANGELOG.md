@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-26
+
 ### Added
 - `generated_at` field on JSON output, holding an ISO 8601 UTC timestamp of when the scan was produced. Makes it easier to identify and diff successive output files.
+
+### Fixed
+- Misconfigured config files now produce warnings instead of being silently ignored. Unknown top-level keys (e.g. the pre-0.2.0 `username` key) are flagged, and a config file that yields zero owners produces a 'no [[owners]] configured' warning. A missing config file remains silent.
 
 ## [0.2.0] - 2026-04-26
 
