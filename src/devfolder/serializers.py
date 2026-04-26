@@ -89,6 +89,7 @@ def scan_result_to_dict(result: ScanResult) -> dict[str, object]:
         root_project = node_to_dict(result.root_project)
 
     return {
+        "generated_at": result.generated_at.isoformat(),
         "root": str(result.root),
         "is_root_project": result.is_root_project,
         "root_project": root_project,

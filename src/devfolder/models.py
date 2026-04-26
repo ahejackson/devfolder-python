@@ -1,6 +1,7 @@
 """Data models for devfolder."""
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 
@@ -171,6 +172,7 @@ class ScanResult:
     root: Path
     children: tuple[Node, ...]
     root_project: ProjectNode | None = None
+    generated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def is_root_project(self) -> bool:

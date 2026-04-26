@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `generated_at` field on JSON output, holding an ISO 8601 UTC timestamp of when the scan was produced. Makes it easier to identify and diff successive output files.
+
 ## [0.2.0] - 2026-04-26
 
 ### Added

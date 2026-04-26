@@ -1,6 +1,7 @@
 """Unit tests for devfolder JSON serialization."""
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from devfolder.models import (
@@ -176,6 +177,22 @@ class TestScanResultToDict:
         result = ScanResult(root=Path("/dev"), children=())
         d = scan_result_to_dict(result)
         assert isinstance(d["root"], str)
+
+    def test_generated_at_is_iso_string(self) -> None:
+        """generated_at is serialized as an ISO 8601 string and round-trips."""
+        ts = datetime(2026, 4, 26, 12, 30, 45, tzinfo=UTC)
+        result = ScanResult(root=Path("/dev"), children=(), generated_at=ts)
+        d = scan_result_to_dict(result)
+        assert d["generated_at"] == "2026-04-26T12:30:45+00:00"
+        assert datetime.fromisoformat(d["generated_at"]) == ts  # type: ignore[arg-type]
+
+    def test_generated_at_default_is_now(self) -> None:
+        """generated_at defaults to a tz-aware UTC timestamp at construction."""
+        before = datetime.now(UTC)
+        result = ScanResult(root=Path("/dev"), children=())
+        after = datetime.now(UTC)
+        assert result.generated_at.tzinfo is not None
+        assert before <= result.generated_at <= after
 
 
 class TestFormatJson:
