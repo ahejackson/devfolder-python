@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-27
+
+### Added
+- Recognise bare git repositories as projects. Bare layouts (project directory containing `HEAD` + `objects/` + `refs/`) are detected at any level of a scan and classified by remote like any other git project.
+- `git_layout` field on project nodes in JSON output: `working-tree`, `linked` (worktrees / submodules), `bare`, or `null` for non-git projects. Visible in scan output without needing to call inspect.
+- New `bare-git` inspect kind for bare repositories. Shape mirrors the existing `git` kind minus `working_tree` (which doesn't apply without a working tree).
+- `gitdir` field on the `git` inspect kind: absolute path of this checkout's git directory.
+- `linked_to` field on the `git` inspect kind: tagged union (`worktree` / `submodule`) describing the linked repo when the checkout is a worktree or submodule. `null` for plain working-tree projects.
+
+### Fixed
+- Worktrees and submodules (which use a `.git` *file* containing a `gitdir:` pointer) were misclassified as `local-untracked`. They are now correctly recognised as git projects, with `git_layout: "linked"` and a populated `linked_to` on the inspect side.
+
+### Schema changes
+- **GUI / JSON consumers should update.** Three additive changes: a new `git_layout` field on project nodes, a new `bare-git` inspect kind, and two new fields (`gitdir`, `linked_to`) on the existing `git` inspect kind. See [`docs/json-output.md`](docs/json-output.md) for the full reference.
+
 ## [0.4.0] - 2026-04-27
 
 ### Added
