@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from .classifier import classify_project, has_git_directory
+from .classifier import classify_project, has_dot_git
 from .config import Config
 from .models import (
     CategoryNode,
@@ -87,7 +87,7 @@ def is_nested_category(path: Path) -> bool:
     Returns:
         True if it's a nested category, False otherwise.
     """
-    if has_git_directory(path):
+    if has_dot_git(path):
         return False
 
     try:
@@ -106,7 +106,7 @@ def is_nested_category(path: Path) -> bool:
                 return False
 
             # Check if any child is a git repo
-            if has_git_directory(entry):
+            if has_dot_git(entry):
                 has_git_child = True
 
         return has_git_child
@@ -196,7 +196,7 @@ def scan(root: Path, config: Config) -> ScanResult:
     root = root.resolve()
 
     # Check if root itself is a project
-    if has_git_directory(root):
+    if has_dot_git(root):
         project = classify_project(root, config)
         return ScanResult(
             root=root,
@@ -238,7 +238,7 @@ def scan(root: Path, config: Config) -> ScanResult:
 
         # Check if this is a project at category level
         try:
-            if has_git_directory(entry):
+            if has_dot_git(entry):
                 project = classify_project(entry, config)
                 children.append(project)
                 continue

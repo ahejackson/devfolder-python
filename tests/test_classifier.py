@@ -6,7 +6,7 @@ import pytest
 
 from devfolder.classifier import (
     classify_project,
-    has_git_directory,
+    has_dot_git,
     is_empty_directory,
     match_owner,
     parse_remote_url,
@@ -184,27 +184,27 @@ class TestIsEmptyDirectory:
         assert is_empty_directory(missing) is False
 
 
-# --- has_git_directory ---
+# --- has_dot_git ---
 
 
-class TestHasGitDirectory:
-    """Tests for .git directory detection."""
+class TestHasDotGit:
+    """Tests for `.git` entry detection (directory or file)."""
 
-    def test_has_git(self, local_git_project: Path) -> None:
-        assert has_git_directory(local_git_project) is True
+    def test_dot_git_directory(self, local_git_project: Path) -> None:
+        assert has_dot_git(local_git_project) is True
 
     def test_no_git(self, untracked_project: Path) -> None:
-        assert has_git_directory(untracked_project) is False
+        assert has_dot_git(untracked_project) is False
 
     def test_empty_directory(self, empty_dir: Path) -> None:
-        assert has_git_directory(empty_dir) is False
+        assert has_dot_git(empty_dir) is False
 
-    def test_git_file_not_dir(self, tmp_path: Path) -> None:
-        """A .git file (not directory) should not count."""
+    def test_dot_git_file_counts(self, tmp_path: Path) -> None:
+        """A `.git` file (worktree / submodule layout) counts as a git project."""
         project = tmp_path / "project"
         project.mkdir()
         (project / ".git").write_text("gitdir: /elsewhere")
-        assert has_git_directory(project) is False
+        assert has_dot_git(project) is True
 
 
 # --- classify_project ---
@@ -238,6 +238,18 @@ class TestClassifyProject:
         assert result.project_type is ProjectType.LOCAL_GIT
         assert result.remote_url is None
         assert result.owner is None
+
+    def test_dot_git_file_classifies_as_git(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        """Worktree/submodule layout (`.git` file) classifies as a git project."""
+        project = tmp_path / "worktree-style"
+        project.mkdir()
+        (project / ".git").write_text("gitdir: /elsewhere/.git/worktrees/foo\n")
+        (project / "main.py").write_text("print('hello')")
+        with make_remote_patch({}):
+            result = classify_project(project, config)
+        assert result.project_type is ProjectType.LOCAL_GIT
 
     def test_owned_remote_project(
         self, owned_remote_project: Path, config: Config

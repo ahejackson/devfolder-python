@@ -1,7 +1,7 @@
 """Per-project inspect logic.
 
 `inspect(path)` dispatches on whether the path looks like a git
-project (has a `.git` directory) and returns either a
+project (has a `.git` directory or file) and returns either a
 `GitInspectResult` or a `NonGitInspectResult`. Designed for the
 "salvage data" use case: surface unpushed work, untracked branches,
 disk usage, and last-modified signals so a human can decide whether
@@ -12,7 +12,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .classifier import has_git_directory
+from .classifier import has_dot_git
 from .git import (
     branches,
     get_git_remotes,
@@ -42,13 +42,13 @@ def inspect(path: Path) -> GitInspectResult | NonGitInspectResult:
             callers (CLI) are responsible for validation.
 
     Returns:
-        A GitInspectResult if `path` contains `.git/`, otherwise a
-        NonGitInspectResult.
+        A GitInspectResult if `path` has a `.git` entry (directory or
+        file), otherwise a NonGitInspectResult.
     """
     scanned_at = datetime.now(UTC)
     mtime = _mtime(path)
 
-    if has_git_directory(path):
+    if has_dot_git(path):
         return _inspect_git(path, mtime=mtime, scanned_at=scanned_at)
     return _inspect_non_git(path, mtime=mtime, scanned_at=scanned_at)
 

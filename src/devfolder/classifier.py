@@ -9,7 +9,7 @@ from .models import Owner, ProjectNode, ProjectType
 __all__ = [
     "classify_project",
     "get_git_remotes",
-    "has_git_directory",
+    "has_dot_git",
     "is_empty_directory",
     "match_owner",
     "parse_remote_url",
@@ -94,16 +94,22 @@ def is_empty_directory(path: Path) -> bool:
         return False
 
 
-def has_git_directory(path: Path) -> bool:
-    """Check if a path contains a .git directory.
+def has_dot_git(path: Path) -> bool:
+    """Check if a path contains a `.git` entry (directory or file).
+
+    A `.git` file (rather than directory) is used by git worktrees and
+    submodules — it contains a `gitdir:` line pointing to the real
+    git directory. Both layouts are valid git projects, so we accept
+    either.
 
     Args:
         path: Path to check.
 
     Returns:
-        True if the path has a .git subdirectory.
+        True if `.git` exists at `path` as either a directory or a file.
     """
-    return (path / ".git").is_dir()
+    dot_git = path / ".git"
+    return dot_git.is_dir() or dot_git.is_file()
 
 
 def classify_project(path: Path, config: Config) -> ProjectNode:
@@ -123,7 +129,7 @@ def classify_project(path: Path, config: Config) -> ProjectNode:
         return ProjectNode(name=name, path=path, project_type=ProjectType.EMPTY)
 
     # Check if it's a git repository
-    if not has_git_directory(path):
+    if not has_dot_git(path):
         return ProjectNode(
             name=name, path=path, project_type=ProjectType.LOCAL_UNTRACKED
         )
