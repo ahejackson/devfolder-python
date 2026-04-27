@@ -17,6 +17,7 @@ from devfolder.git import (
     WorkingTreeState,
     branches,
     get_git_remotes,
+    git_meta,
     last_commit_at,
     parse_remote,
     stash_count,
@@ -417,3 +418,56 @@ class TestParseRemote:
             "origin", "https://github.com/owner/some.repo"
         )
         assert result.repo == "some.repo"
+
+
+# --- git_meta ---
+
+
+class TestGitMeta:
+    """Layout/linkage probe via `git rev-parse`."""
+
+    def test_working_tree_project(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        init_git_repo(repo)
+        meta = git_meta(repo)
+        assert meta is not None
+        assert meta.is_bare is False
+        assert meta.gitdir == (repo / ".git").resolve()
+        assert meta.gitdir == meta.common_dir
+        assert meta.superproject_path is None
+
+    def test_bare_repo(self, bare_git_project: Path) -> None:
+        meta = git_meta(bare_git_project)
+        assert meta is not None
+        assert meta.is_bare is True
+        assert meta.gitdir == bare_git_project.resolve()
+        assert meta.superproject_path is None
+
+    def test_worktree(
+        self, worktree_project: tuple[Path, Path]
+    ) -> None:
+        wt, main = worktree_project
+        meta = git_meta(wt)
+        assert meta is not None
+        assert meta.is_bare is False
+        # gitdir is the worktree's per-checkout dir; common_dir is the
+        # main repo's gitdir; they differ for a worktree.
+        assert meta.gitdir != meta.common_dir
+        assert meta.common_dir == (main / ".git").resolve()
+        assert meta.superproject_path is None
+
+    def test_submodule(
+        self, submodule_project: tuple[Path, Path]
+    ) -> None:
+        sub, parent = submodule_project
+        meta = git_meta(sub)
+        assert meta is not None
+        assert meta.is_bare is False
+        assert meta.superproject_path is not None
+        assert meta.superproject_path.resolve() == parent.resolve()
+
+    def test_non_git_path_returns_none(self, tmp_path: Path) -> None:
+        d = tmp_path / "not-a-repo"
+        d.mkdir()
+        meta = git_meta(d)
+        assert meta is None

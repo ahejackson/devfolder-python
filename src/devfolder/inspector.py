@@ -1,27 +1,37 @@
 """Per-project inspect logic.
 
-`inspect(path)` dispatches on whether the path looks like a git
-project (has a `.git` directory or file) and returns either a
-`GitInspectResult` or a `NonGitInspectResult`. Designed for the
+`inspect(path)` dispatches on the structural git layout (working-tree,
+linked, bare, or none) and returns one of `GitInspectResult`,
+`BareGitInspectResult`, or `NonGitInspectResult`. Designed for the
 "salvage data" use case: surface unpushed work, untracked branches,
 disk usage, and last-modified signals so a human can decide whether
 a project needs attention.
 """
 
 import os
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .classifier import has_dot_git
+from .classifier import detect_git_layout
 from .git import (
+    GitMeta,
     branches,
     get_git_remotes,
+    git_meta,
     last_commit_at,
     parse_remote,
     stash_count,
     status,
 )
-from .models import GitInspectResult, NonGitInspectResult
+from .models import (
+    BareGitInspectResult,
+    GitInspectResult,
+    GitLayout,
+    LinkedRepo,
+    LinkedRepoKind,
+    NonGitInspectResult,
+)
 
 __all__ = ["EXCLUDED_WALK_DIRS", "inspect"]
 
@@ -34,7 +44,9 @@ __all__ = ["EXCLUDED_WALK_DIRS", "inspect"]
 EXCLUDED_WALK_DIRS = frozenset({"node_modules", ".git", ".venv"})
 
 
-def inspect(path: Path) -> GitInspectResult | NonGitInspectResult:
+def inspect(
+    path: Path,
+) -> GitInspectResult | BareGitInspectResult | NonGitInspectResult:
     """Inspect a single project directory.
 
     Args:
@@ -42,27 +54,76 @@ def inspect(path: Path) -> GitInspectResult | NonGitInspectResult:
             callers (CLI) are responsible for validation.
 
     Returns:
-        A GitInspectResult if `path` has a `.git` entry (directory or
-        file), otherwise a NonGitInspectResult.
+        A GitInspectResult for working-tree git projects (including
+        worktrees and submodules), a BareGitInspectResult for bare
+        repos, or a NonGitInspectResult for empty/untracked dirs.
     """
     scanned_at = datetime.now(UTC)
     mtime = _mtime(path)
 
-    if has_dot_git(path):
-        return _inspect_git(path, mtime=mtime, scanned_at=scanned_at)
-    return _inspect_non_git(path, mtime=mtime, scanned_at=scanned_at)
+    layout = detect_git_layout(path)
+    if layout is None:
+        return _inspect_non_git(path, mtime=mtime, scanned_at=scanned_at)
+
+    meta = git_meta(path)
+    is_bare = _resolve_bare(path, layout=layout, meta=meta)
+
+    if is_bare:
+        return _inspect_bare_git(path, mtime=mtime, scanned_at=scanned_at)
+    return _inspect_git(path, meta=meta, mtime=mtime, scanned_at=scanned_at)
+
+
+def _resolve_bare(
+    path: Path, *, layout: GitLayout, meta: GitMeta | None
+) -> bool:
+    """Decide whether to treat the project as bare.
+
+    Trusts `git rev-parse` when available. If structural detection
+    and git disagree, emits a stderr warning and trusts git. When
+    git is unavailable, falls back to the structural classification.
+    """
+    structural_bare = layout is GitLayout.BARE
+    if meta is None:
+        return structural_bare
+
+    if meta.is_bare != structural_bare:
+        verdict = "bare" if meta.is_bare else "non-bare"
+        seen = "bare" if structural_bare else "non-bare"
+        print(
+            f"warning: structural detection said {seen} but git says "
+            f"{verdict} for {path}; trusting git",
+            file=sys.stderr,
+        )
+    return meta.is_bare
 
 
 def _inspect_git(
-    path: Path, *, mtime: datetime, scanned_at: datetime
+    path: Path,
+    *,
+    meta: GitMeta | None,
+    mtime: datetime,
+    scanned_at: datetime,
 ) -> GitInspectResult:
-    """Collect git-project inspect data."""
+    """Collect inspect data for a working-tree git project."""
     remotes_raw = get_git_remotes(path)
     remotes = tuple(
         parse_remote(name, url) for name, url in sorted(remotes_raw.items())
     )
+
+    if meta is not None:
+        gitdir = meta.gitdir
+        linked_to = _derive_linked_to(meta)
+    else:
+        # `git rev-parse` failed — fall back to a best-effort gitdir
+        # path and skip linkage info. The structural detection got us
+        # here, so `.git` should exist as a file or directory.
+        gitdir = path / ".git"
+        linked_to = None
+
     return GitInspectResult(
         path=path,
+        gitdir=gitdir,
+        linked_to=linked_to,
         working_tree=status(path),
         branches=branches(path),
         stash_count=stash_count(path),
@@ -71,6 +132,47 @@ def _inspect_git(
         remotes=remotes,
         scanned_at=scanned_at,
     )
+
+
+def _inspect_bare_git(
+    path: Path, *, mtime: datetime, scanned_at: datetime
+) -> BareGitInspectResult:
+    """Collect inspect data for a bare git repository."""
+    remotes_raw = get_git_remotes(path)
+    remotes = tuple(
+        parse_remote(name, url) for name, url in sorted(remotes_raw.items())
+    )
+    return BareGitInspectResult(
+        path=path,
+        branches=branches(path),
+        stash_count=stash_count(path),
+        last_commit_at=last_commit_at(path),
+        mtime=mtime,
+        remotes=remotes,
+        scanned_at=scanned_at,
+    )
+
+
+def _derive_linked_to(meta: GitMeta) -> LinkedRepo | None:
+    """Derive linkage info from a `GitMeta`.
+
+    Submodules are identified by a non-empty superproject path
+    (returned by `git rev-parse --show-superproject-working-tree`).
+    Worktrees are identified by `gitdir != common_dir` — the common
+    dir is the main repo's gitdir, and the main repo's working tree
+    is its parent.
+    """
+    if meta.superproject_path is not None:
+        return LinkedRepo(
+            kind=LinkedRepoKind.SUBMODULE,
+            linked_repo_path=meta.superproject_path,
+        )
+    if meta.gitdir != meta.common_dir:
+        return LinkedRepo(
+            kind=LinkedRepoKind.WORKTREE,
+            linked_repo_path=meta.common_dir.parent,
+        )
+    return None
 
 
 def _inspect_non_git(

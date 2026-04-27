@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from devfolder.models import (
+    BareGitInspectResult,
     BranchSummary,
     CategoryNode,
     ErrorNode,
@@ -12,6 +13,8 @@ from devfolder.models import (
     GitLayout,
     IgnoredNode,
     IgnoreReason,
+    LinkedRepo,
+    LinkedRepoKind,
     NonGitInspectResult,
     ProjectNode,
     ProjectType,
@@ -312,6 +315,8 @@ class TestInspectToDict:
         scanned = datetime(2026, 4, 27, 18, 30, tzinfo=UTC)
         result = GitInspectResult(
             path=Path("/dev/repo"),
+            gitdir=Path("/dev/repo/.git"),
+            linked_to=None,
             working_tree=WorkingTreeState(
                 clean=False, staged=1, modified=2, untracked=3
             ),
@@ -337,6 +342,8 @@ class TestInspectToDict:
 
         assert d["kind"] == "git"
         assert d["path"] == "/dev/repo"
+        assert d["gitdir"] == "/dev/repo/.git"
+        assert d["linked_to"] is None
         assert d["working_tree"] == {
             "clean": False,
             "staged": 1,
@@ -364,6 +371,8 @@ class TestInspectToDict:
         scanned = datetime(2026, 4, 27, 18, 30, tzinfo=UTC)
         result = GitInspectResult(
             path=Path("/dev/empty"),
+            gitdir=Path("/dev/empty/.git"),
+            linked_to=None,
             working_tree=WorkingTreeState(
                 clean=True, staged=0, modified=0, untracked=0
             ),
@@ -379,6 +388,65 @@ class TestInspectToDict:
 
         d = inspect_to_dict(result)
         assert d["last_commit_at"] is None
+
+    def test_git_result_with_worktree_linkage(self) -> None:
+        """A worktree gets a populated `linked_to` with kind=worktree."""
+        scanned = datetime(2026, 4, 27, 18, 30, tzinfo=UTC)
+        mtime = datetime(2026, 4, 27, 18, 0, tzinfo=UTC)
+        result = GitInspectResult(
+            path=Path("/dev/wt"),
+            gitdir=Path("/dev/main/.git/worktrees/wt"),
+            linked_to=LinkedRepo(
+                kind=LinkedRepoKind.WORKTREE,
+                linked_repo_path=Path("/dev/main"),
+            ),
+            working_tree=WorkingTreeState(
+                clean=True, staged=0, modified=0, untracked=0
+            ),
+            branches=BranchSummary(
+                total=1, no_upstream=0, ahead_of_upstream=0
+            ),
+            stash_count=0,
+            last_commit_at=None,
+            mtime=mtime,
+            remotes=(),
+            scanned_at=scanned,
+        )
+        d = inspect_to_dict(result)
+        assert d["gitdir"] == "/dev/main/.git/worktrees/wt"
+        assert d["linked_to"] == {
+            "kind": "worktree",
+            "linked_repo_path": "/dev/main",
+        }
+
+    def test_bare_git_result_full_shape(self) -> None:
+        last_commit = datetime(2026, 4, 26, 22, 58, tzinfo=UTC)
+        mtime = datetime(2026, 4, 27, 18, 0, tzinfo=UTC)
+        scanned = datetime(2026, 4, 27, 18, 30, tzinfo=UTC)
+        result = BareGitInspectResult(
+            path=Path("/dev/myrepo.git"),
+            branches=BranchSummary(
+                total=2, no_upstream=0, ahead_of_upstream=0
+            ),
+            stash_count=0,
+            last_commit_at=last_commit,
+            mtime=mtime,
+            remotes=(),
+            scanned_at=scanned,
+        )
+
+        d = inspect_to_dict(result)
+        assert d["kind"] == "bare-git"
+        assert d["path"] == "/dev/myrepo.git"
+        assert "working_tree" not in d
+        assert "linked_to" not in d
+        assert "gitdir" not in d
+        assert d["branches"] == {
+            "total": 2,
+            "no_upstream": 0,
+            "ahead_of_upstream": 0,
+        }
+        assert d["last_commit_at"] == "2026-04-26T22:58:00+00:00"
 
     def test_non_git_result_full_shape(self) -> None:
         mtime = datetime(2026, 4, 27, 18, 0, tzinfo=UTC)

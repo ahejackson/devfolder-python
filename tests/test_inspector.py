@@ -1,10 +1,16 @@
 """Tests for devfolder.inspector module."""
 
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
 from devfolder.inspector import EXCLUDED_WALK_DIRS, inspect
-from devfolder.models import GitInspectResult, NonGitInspectResult
+from devfolder.models import (
+    BareGitInspectResult,
+    GitInspectResult,
+    LinkedRepoKind,
+    NonGitInspectResult,
+)
 
 from .conftest import git_commit, init_git_repo, run_git, setup_remote_pair
 
@@ -59,6 +65,31 @@ class TestInspectGit:
         assert result.last_commit_at.tzinfo is not None
         assert result.mtime.tzinfo is not None
         assert result.scanned_at.tzinfo is not None
+        # Working-tree project: gitdir is `<path>/.git`, no linkage.
+        assert result.gitdir == (repo / ".git").resolve()
+        assert result.linked_to is None
+
+    def test_worktree_inspect(
+        self, worktree_project: tuple[Path, Path]
+    ) -> None:
+        """A worktree has linked_to=worktree pointing at the main repo."""
+        wt, main = worktree_project
+        result = inspect(wt)
+        assert isinstance(result, GitInspectResult)
+        assert result.linked_to is not None
+        assert result.linked_to.kind is LinkedRepoKind.WORKTREE
+        assert result.linked_to.linked_repo_path.resolve() == main.resolve()
+
+    def test_submodule_inspect(
+        self, submodule_project: tuple[Path, Path]
+    ) -> None:
+        """A submodule has linked_to=submodule pointing at the parent repo."""
+        sub, parent = submodule_project
+        result = inspect(sub)
+        assert isinstance(result, GitInspectResult)
+        assert result.linked_to is not None
+        assert result.linked_to.kind is LinkedRepoKind.SUBMODULE
+        assert result.linked_to.linked_repo_path.resolve() == parent.resolve()
 
     def test_dirty_repo(self, tmp_path: Path) -> None:
         repo = tmp_path / "dirty"
@@ -135,6 +166,48 @@ class TestInspectGit:
         assert names == ["alpha", "zeta"]
         assert result.remotes[0].repo == "alpha"
         assert result.remotes[1].repo == "zeta"
+
+
+class TestInspectBareGit:
+    """BareGitInspectResult content for bare repos."""
+
+    def test_bare_repo_returns_bare_result(
+        self, bare_git_project: Path
+    ) -> None:
+        result = inspect(bare_git_project)
+        assert isinstance(result, BareGitInspectResult)
+        assert result.path == bare_git_project
+        assert result.branches.total == 0
+        assert result.stash_count == 0
+        assert result.last_commit_at is None
+        assert result.mtime.tzinfo is not None
+        assert result.scanned_at.tzinfo is not None
+
+    def test_bare_repo_with_remote(self, tmp_path: Path) -> None:
+        """A bare repo with a configured remote captures it."""
+        bare = tmp_path / "myrepo.git"
+        subprocess.run(
+            ["git", "init", "-q", "--bare", "-b", "main", str(bare)],
+            check=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(bare),
+                "remote",
+                "add",
+                "origin",
+                "git@github.com:owner/repo.git",
+            ],
+            check=True,
+        )
+
+        result = inspect(bare)
+        assert isinstance(result, BareGitInspectResult)
+        assert len(result.remotes) == 1
+        assert result.remotes[0].name == "origin"
+        assert result.remotes[0].owner == "owner"
 
 
 class TestInspectNonGit:

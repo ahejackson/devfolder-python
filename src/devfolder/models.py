@@ -6,6 +6,7 @@ from enum import Enum
 from pathlib import Path
 
 __all__ = [
+    "BareGitInspectResult",
     "BranchSummary",
     "CategoryNode",
     "ErrorNode",
@@ -13,6 +14,8 @@ __all__ = [
     "GitLayout",
     "IgnoredNode",
     "IgnoreReason",
+    "LinkedRepo",
+    "LinkedRepoKind",
     "Node",
     "NodeKind",
     "NonGitInspectResult",
@@ -238,12 +241,51 @@ class RemoteRecord:
     repo: str | None
 
 
+class LinkedRepoKind(Enum):
+    """The kind of repo a linked project is connected to."""
+
+    WORKTREE = "worktree"
+    SUBMODULE = "submodule"
+
+
+@dataclass(frozen=True)
+class LinkedRepo:
+    """Information about the repo a linked project is connected to.
+
+    For worktrees, this is the main checkout. For submodules, it is
+    the superproject's working tree.
+    """
+
+    kind: LinkedRepoKind
+    linked_repo_path: Path
+
+
 @dataclass(frozen=True)
 class GitInspectResult:
-    """Per-project inspect output for a git project."""
+    """Per-project inspect output for a git project with a working tree."""
 
     path: Path
+    gitdir: Path
+    linked_to: LinkedRepo | None
     working_tree: WorkingTreeState
+    branches: BranchSummary
+    stash_count: int
+    last_commit_at: datetime | None
+    mtime: datetime
+    remotes: tuple[RemoteRecord, ...]
+    scanned_at: datetime
+
+
+@dataclass(frozen=True)
+class BareGitInspectResult:
+    """Per-project inspect output for a bare git repository.
+
+    Bare repos lack a working tree, so the `working_tree` and
+    `linked_to` fields are absent. The project path itself is the
+    gitdir.
+    """
+
+    path: Path
     branches: BranchSummary
     stash_count: int
     last_commit_at: datetime | None

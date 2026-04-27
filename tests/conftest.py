@@ -203,6 +203,55 @@ def bare_git_project(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def worktree_project(tmp_path: Path) -> tuple[Path, Path]:
+    """A real git worktree.
+
+    Returns `(worktree_path, main_repo_path)`. The worktree has a
+    `.git` *file* pointing at `<main>/.git/worktrees/<name>`.
+    """
+    main = tmp_path / "main"
+    init_git_repo(main)
+    (main / "a.txt").write_text("a")
+    git_commit(main, "init")
+
+    wt = tmp_path / "worktree"
+    run_git(main, "worktree", "add", "-q", str(wt))
+    return wt, main
+
+
+@pytest.fixture
+def submodule_project(tmp_path: Path) -> tuple[Path, Path]:
+    """A real git submodule.
+
+    Returns `(submodule_path, parent_repo_path)`. The submodule has a
+    `.git` file pointing at `<parent>/.git/modules/<name>`.
+    """
+    sub_origin = tmp_path / "sub-origin"
+    init_git_repo(sub_origin)
+    (sub_origin / "lib.py").write_text("lib")
+    git_commit(sub_origin, "init")
+
+    parent = tmp_path / "parent"
+    init_git_repo(parent)
+    (parent / "main.py").write_text("main")
+    git_commit(parent, "init")
+    # `protocol.file.allow=always` is needed since git 2.38 for local
+    # file:// submodule URLs.
+    run_git(
+        parent,
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        str(sub_origin),
+        "lib",
+    )
+    git_commit(parent, "add submodule")
+
+    return parent / "lib", parent
+
+
+@pytest.fixture
 def root_is_project(tmp_path: Path) -> Path:
     """A root directory that is itself a git project."""
     root = tmp_path / "project-root"

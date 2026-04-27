@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 __all__ = ["format_inspect_text", "format_tree"]
 
 from .models import (
+    BareGitInspectResult,
+    BranchSummary,
     CategoryNode,
     ErrorNode,
     GitInspectResult,
@@ -15,6 +17,7 @@ from .models import (
     NonGitInspectResult,
     ProjectNode,
     ProjectType,
+    RemoteRecord,
     ScanResult,
     SymlinkNode,
 )
@@ -147,11 +150,13 @@ def format_tree(result: ScanResult) -> str:
 
 
 def format_inspect_text(
-    result: GitInspectResult | NonGitInspectResult,
+    result: GitInspectResult | BareGitInspectResult | NonGitInspectResult,
 ) -> str:
     """Format an inspect result as a human-readable text block."""
     if isinstance(result, GitInspectResult):
         return _format_git_inspect_text(result)
+    if isinstance(result, BareGitInspectResult):
+        return _format_bare_git_inspect_text(result)
     return _format_non_git_inspect_text(result)
 
 
@@ -169,11 +174,7 @@ def _format_git_inspect_text(result: GitInspectResult) -> str:
             parts.append(f"{wt.untracked} untracked")
         wt_line = "dirty (" + ", ".join(parts) + ")"
 
-    branches_line = (
-        f"{result.branches.total} total · "
-        f"{result.branches.no_upstream} without upstream · "
-        f"{result.branches.ahead_of_upstream} ahead"
-    )
+    branches_line = _format_branches(result.branches)
 
     last_commit_line = (
         _format_datetime(result.last_commit_at)
@@ -191,10 +192,57 @@ def _format_git_inspect_text(result: GitInspectResult) -> str:
         f"Last modified:  {_format_datetime(result.mtime)}",
     ]
 
-    if result.remotes:
+    if result.linked_to is not None:
+        lines.append(
+            f"Linked to:      {result.linked_to.kind.value} of "
+            f"{result.linked_to.linked_repo_path}"
+        )
+
+    lines.extend(_format_remotes_block(result.remotes))
+
+    lines.append("")
+    lines.append(f"Scanned at:     {result.scanned_at.isoformat()}")
+    return "\n".join(lines)
+
+
+def _format_bare_git_inspect_text(result: BareGitInspectResult) -> str:
+    branches_line = _format_branches(result.branches)
+    last_commit_line = (
+        _format_datetime(result.last_commit_at)
+        if result.last_commit_at is not None
+        else "(no commits)"
+    )
+
+    lines = [
+        f"{result.path} (bare git)",
+        "",
+        f"Branches:       {branches_line}",
+        f"Stash:          {result.stash_count}",
+        f"Last commit:    {last_commit_line}",
+        f"Last modified:  {_format_datetime(result.mtime)}",
+    ]
+
+    lines.extend(_format_remotes_block(result.remotes))
+
+    lines.append("")
+    lines.append(f"Scanned at:     {result.scanned_at.isoformat()}")
+    return "\n".join(lines)
+
+
+def _format_branches(branches: BranchSummary) -> str:
+    return (
+        f"{branches.total} total · "
+        f"{branches.no_upstream} without upstream · "
+        f"{branches.ahead_of_upstream} ahead"
+    )
+
+
+def _format_remotes_block(remotes: tuple[RemoteRecord, ...]) -> list[str]:
+    lines: list[str] = []
+    if remotes:
         lines.append("")
         lines.append("Remotes:")
-        for r in result.remotes:
+        for r in remotes:
             location = (
                 f"{r.host}/{r.owner}/{r.repo}"
                 if r.host and r.owner and r.repo
@@ -204,10 +252,7 @@ def _format_git_inspect_text(result: GitInspectResult) -> str:
     else:
         lines.append("")
         lines.append("Remotes:        (none)")
-
-    lines.append("")
-    lines.append(f"Scanned at:     {result.scanned_at.isoformat()}")
-    return "\n".join(lines)
+    return lines
 
 
 def _format_non_git_inspect_text(result: NonGitInspectResult) -> str:

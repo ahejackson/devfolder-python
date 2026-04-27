@@ -7,6 +7,7 @@ last-commit) rather than raising — callers don't need to distinguish
 """
 
 import subprocess
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -14,14 +15,32 @@ from .models import BranchSummary, RemoteRecord, WorkingTreeState
 
 __all__ = [
     "BranchSummary",
+    "GitMeta",
     "WorkingTreeState",
     "branches",
     "get_git_remotes",
+    "git_meta",
     "last_commit_at",
     "parse_remote",
     "stash_count",
     "status",
 ]
+
+
+@dataclass(frozen=True)
+class GitMeta:
+    """Layout and linkage information from `git rev-parse`.
+
+    `gitdir` is this checkout's git directory. `common_dir` is the
+    main repository's git directory — it differs from `gitdir` only
+    for worktrees. `superproject_path` is the parent repo's working
+    tree path for submodules; None otherwise.
+    """
+
+    is_bare: bool
+    gitdir: Path
+    common_dir: Path
+    superproject_path: Path | None
 
 
 def _run_git(path: Path, args: list[str]) -> tuple[int, str]:
@@ -170,6 +189,52 @@ def last_commit_at(path: Path) -> datetime | None:
         return datetime.fromisoformat(text)
     except ValueError:
         return None
+
+
+def git_meta(path: Path) -> GitMeta | None:
+    """Probe git for layout and linkage info via a single `rev-parse` call.
+
+    Combines `--is-bare-repository`, `--git-dir`, `--git-common-dir`,
+    and `--show-superproject-working-tree` into one subprocess.
+    `--path-format=absolute` ensures the path outputs are absolute
+    so callers can compare them directly.
+
+    Returns:
+        A `GitMeta` on success, or None if `git rev-parse` fails
+        (e.g. git binary missing, path is not in any git project).
+    """
+    code, stdout = _run_git(
+        path,
+        [
+            "rev-parse",
+            "--is-bare-repository",
+            "--path-format=absolute",
+            "--git-dir",
+            "--git-common-dir",
+            "--show-superproject-working-tree",
+        ],
+    )
+    if code != 0:
+        return None
+
+    # `--show-superproject-working-tree` emits nothing (not even a blank
+    # line) outside a submodule, so the output can be 3 or 4 lines.
+    lines = stdout.rstrip("\n").split("\n")
+    if len(lines) < 3:
+        return None
+
+    is_bare = lines[0].strip() == "true"
+    gitdir = Path(lines[1].strip())
+    common_dir = Path(lines[2].strip())
+    superproject_raw = lines[3].strip() if len(lines) >= 4 else ""
+    superproject_path = Path(superproject_raw) if superproject_raw else None
+
+    return GitMeta(
+        is_bare=is_bare,
+        gitdir=gitdir,
+        common_dir=common_dir,
+        superproject_path=superproject_path,
+    )
 
 
 def parse_remote(name: str, url: str) -> RemoteRecord:
