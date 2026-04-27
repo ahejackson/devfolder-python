@@ -7,8 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-27
+
+### Added
+- `devfolder inspect <path>` subcommand. Collects detailed per-project data for a single project: working tree state, branch summary, stash count, last commit, filesystem mtime, and parsed remotes for git projects; or file count, folder count, total size on disk, and mtime for non-git projects. Default text output for human use; `-o json` emits a structured record with a `kind: "git" | "non-git"` discriminator.
+- `git.py` module centralising git CLI invocations (`status`, `branches`, `stash_count`, `last_commit_at`, `parse_remote`, `get_git_remotes`).
+
 ### Changed
 - **Breaking:** CLI restructured around subcommands. The previous bare invocation (`devfolder ~/dev`) is replaced with `devfolder scan ~/dev`. Run `devfolder --help` to see available subcommands.
+
+### Notes
+- Non-git inspect walks skip `node_modules`, `.git`, and `.venv` directories. Other build/cache directories (`dist`, `target`, `__pycache__`, etc.) are walked.
 
 ## [0.2.1] - 2026-04-26
 

@@ -5,8 +5,9 @@ A CLI tool to scan and categorize local development projects.
 ## Quick Start
 
 ```sh
-uv run devfolder scan              # Scan current directory
-uv run devfolder scan ~/dev        # Scan specific directory
+uv run devfolder scan                 # Scan current directory
+uv run devfolder scan ~/dev           # Scan a specific directory
+uv run devfolder inspect ~/dev/myrepo # Detailed data for one project
 ```
 
 ## Project Structure
@@ -16,9 +17,11 @@ src/devfolder/
 ├── __init__.py      # Package entry point (re-exports `main`)
 ├── cli.py           # CLI dispatch and subcommand parsers
 ├── scanner.py       # Directory scanning logic
-├── models.py        # Data classes and enums
 ├── classifier.py    # Project classification
-├── output.py        # Tree view formatting
+├── inspector.py     # Per-project detailed inspect
+├── git.py           # Git CLI wrappers
+├── models.py        # Data classes and enums
+├── output.py        # Text formatting (tree + inspect)
 ├── serializers.py   # JSON serialization
 └── config.py        # Configuration loading
 ```

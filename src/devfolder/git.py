@@ -7,9 +7,10 @@ last-commit) rather than raising — callers don't need to distinguish
 """
 
 import subprocess
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+
+from .models import BranchSummary, RemoteRecord, WorkingTreeState
 
 __all__ = [
     "BranchSummary",
@@ -17,28 +18,10 @@ __all__ = [
     "branches",
     "get_git_remotes",
     "last_commit_at",
+    "parse_remote",
     "stash_count",
     "status",
 ]
-
-
-@dataclass(frozen=True)
-class WorkingTreeState:
-    """Summary of `git status` output for a working tree."""
-
-    clean: bool
-    staged: int
-    modified: int
-    untracked: int
-
-
-@dataclass(frozen=True)
-class BranchSummary:
-    """Summary of local branches and their upstream relationships."""
-
-    total: int
-    no_upstream: int
-    ahead_of_upstream: int
 
 
 def _run_git(path: Path, args: list[str]) -> tuple[int, str]:
@@ -187,3 +170,42 @@ def last_commit_at(path: Path) -> datetime | None:
         return datetime.fromisoformat(text)
     except ValueError:
         return None
+
+
+def parse_remote(name: str, url: str) -> RemoteRecord:
+    """Parse a git remote URL into a structured record.
+
+    Handles SSH (`git@host:owner/repo.git`), HTTPS
+    (`https://host/owner/repo.git`), and `git://` URLs. The trailing
+    `.git` suffix is stripped from the repo name. host/owner/repo are
+    None when the URL doesn't fit a recognised shape.
+    """
+    host: str | None = None
+    owner: str | None = None
+    repo: str | None = None
+
+    path = ""
+    if url.startswith("git@"):
+        host_part, sep, path = url.partition(":")
+        if sep:
+            host = host_part[len("git@") :] or None
+    elif "://" in url:
+        _, _, rest = url.partition("://")
+        host_str, _, path = rest.partition("/")
+        host = host_str or None
+
+    if host is not None:
+        path_parts = [p for p in path.split("/") if p]
+        if path_parts:
+            owner = path_parts[0]
+        if len(path_parts) >= 2:
+            repo_part = path_parts[1]
+            repo = (
+                repo_part.removesuffix(".git")
+                if repo_part.endswith(".git")
+                else repo_part
+            )
+
+    return RemoteRecord(
+        name=name, url=url, host=host, owner=owner, repo=repo
+    )

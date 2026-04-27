@@ -5,16 +5,27 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from devfolder.models import (
+    BranchSummary,
     CategoryNode,
     ErrorNode,
+    GitInspectResult,
     IgnoredNode,
     IgnoreReason,
+    NonGitInspectResult,
     ProjectNode,
     ProjectType,
+    RemoteRecord,
     ScanResult,
     SymlinkNode,
+    WorkingTreeState,
 )
-from devfolder.serializers import format_json, node_to_dict, scan_result_to_dict
+from devfolder.serializers import (
+    format_inspect_json,
+    format_json,
+    inspect_to_dict,
+    node_to_dict,
+    scan_result_to_dict,
+)
 
 
 class TestNodeToDict:
@@ -257,3 +268,125 @@ class TestFormatJson:
         assert parsed["children"][1]["kind"] == "symlink"
         assert parsed["children"][2]["kind"] == "ignored"
         assert parsed["children"][3]["kind"] == "error"
+
+
+class TestInspectToDict:
+    """Tests for inspect_to_dict()."""
+
+    def test_git_result_full_shape(self) -> None:
+        last_commit = datetime(2026, 4, 26, 22, 58, tzinfo=UTC)
+        mtime = datetime(2026, 4, 27, 18, 0, tzinfo=UTC)
+        scanned = datetime(2026, 4, 27, 18, 30, tzinfo=UTC)
+        result = GitInspectResult(
+            path=Path("/dev/repo"),
+            working_tree=WorkingTreeState(
+                clean=False, staged=1, modified=2, untracked=3
+            ),
+            branches=BranchSummary(
+                total=4, no_upstream=1, ahead_of_upstream=2
+            ),
+            stash_count=5,
+            last_commit_at=last_commit,
+            mtime=mtime,
+            remotes=(
+                RemoteRecord(
+                    name="origin",
+                    url="git@github.com:owner/repo.git",
+                    host="github.com",
+                    owner="owner",
+                    repo="repo",
+                ),
+            ),
+            scanned_at=scanned,
+        )
+
+        d = inspect_to_dict(result)
+
+        assert d["kind"] == "git"
+        assert d["path"] == "/dev/repo"
+        assert d["working_tree"] == {
+            "clean": False,
+            "staged": 1,
+            "modified": 2,
+            "untracked": 3,
+        }
+        assert d["branches"] == {
+            "total": 4,
+            "no_upstream": 1,
+            "ahead_of_upstream": 2,
+        }
+        assert d["stash_count"] == 5
+        assert d["last_commit_at"] == "2026-04-26T22:58:00+00:00"
+        assert d["mtime"] == "2026-04-27T18:00:00+00:00"
+        assert d["scanned_at"] == "2026-04-27T18:30:00+00:00"
+        remotes_field = d["remotes"]
+        assert isinstance(remotes_field, list) and len(remotes_field) == 1
+        assert remotes_field[0]["host"] == "github.com"
+        assert remotes_field[0]["owner"] == "owner"
+        assert remotes_field[0]["repo"] == "repo"
+
+    def test_git_result_with_no_last_commit(self) -> None:
+        """An empty repo serialises last_commit_at as null."""
+        mtime = datetime(2026, 4, 27, 18, 0, tzinfo=UTC)
+        scanned = datetime(2026, 4, 27, 18, 30, tzinfo=UTC)
+        result = GitInspectResult(
+            path=Path("/dev/empty"),
+            working_tree=WorkingTreeState(
+                clean=True, staged=0, modified=0, untracked=0
+            ),
+            branches=BranchSummary(
+                total=0, no_upstream=0, ahead_of_upstream=0
+            ),
+            stash_count=0,
+            last_commit_at=None,
+            mtime=mtime,
+            remotes=(),
+            scanned_at=scanned,
+        )
+
+        d = inspect_to_dict(result)
+        assert d["last_commit_at"] is None
+
+    def test_non_git_result_full_shape(self) -> None:
+        mtime = datetime(2026, 4, 27, 18, 0, tzinfo=UTC)
+        scanned = datetime(2026, 4, 27, 18, 30, tzinfo=UTC)
+        result = NonGitInspectResult(
+            path=Path("/dev/plain"),
+            file_count=10,
+            folder_count=3,
+            total_size_bytes=4096,
+            mtime=mtime,
+            scanned_at=scanned,
+        )
+
+        d = inspect_to_dict(result)
+        assert d == {
+            "kind": "non-git",
+            "path": "/dev/plain",
+            "file_count": 10,
+            "folder_count": 3,
+            "total_size_bytes": 4096,
+            "mtime": "2026-04-27T18:00:00+00:00",
+            "scanned_at": "2026-04-27T18:30:00+00:00",
+        }
+
+
+class TestFormatInspectJson:
+    """Tests for format_inspect_json()."""
+
+    def test_round_trips_through_json(self) -> None:
+        scanned = datetime(2026, 4, 27, 18, 30, tzinfo=UTC)
+        mtime = datetime(2026, 4, 27, 18, 0, tzinfo=UTC)
+        result = NonGitInspectResult(
+            path=Path("/dev/plain"),
+            file_count=2,
+            folder_count=1,
+            total_size_bytes=99,
+            mtime=mtime,
+            scanned_at=scanned,
+        )
+        output = format_inspect_json(result)
+        parsed = json.loads(output)
+
+        assert parsed["kind"] == "non-git"
+        assert parsed["file_count"] == 2

@@ -1,14 +1,18 @@
 """Output formatting for devfolder."""
 
-__all__ = ["format_tree"]
+from datetime import UTC, datetime
+
+__all__ = ["format_inspect_text", "format_tree"]
 
 from .models import (
     CategoryNode,
     ErrorNode,
+    GitInspectResult,
     IgnoredNode,
     IgnoreReason,
     Node,
     NodeKind,
+    NonGitInspectResult,
     ProjectNode,
     ProjectType,
     ScanResult,
@@ -140,3 +144,100 @@ def format_tree(result: ScanResult) -> str:
         lines.extend(format_node(child, "", is_last))
 
     return "\n".join(lines)
+
+
+def format_inspect_text(
+    result: GitInspectResult | NonGitInspectResult,
+) -> str:
+    """Format an inspect result as a human-readable text block."""
+    if isinstance(result, GitInspectResult):
+        return _format_git_inspect_text(result)
+    return _format_non_git_inspect_text(result)
+
+
+def _format_git_inspect_text(result: GitInspectResult) -> str:
+    wt = result.working_tree
+    if wt.clean:
+        wt_line = "clean"
+    else:
+        parts = []
+        if wt.staged:
+            parts.append(f"{wt.staged} staged")
+        if wt.modified:
+            parts.append(f"{wt.modified} modified")
+        if wt.untracked:
+            parts.append(f"{wt.untracked} untracked")
+        wt_line = "dirty (" + ", ".join(parts) + ")"
+
+    branches_line = (
+        f"{result.branches.total} total · "
+        f"{result.branches.no_upstream} without upstream · "
+        f"{result.branches.ahead_of_upstream} ahead"
+    )
+
+    last_commit_line = (
+        _format_datetime(result.last_commit_at)
+        if result.last_commit_at is not None
+        else "(no commits)"
+    )
+
+    lines = [
+        f"{result.path} (git)",
+        "",
+        f"Working tree:   {wt_line}",
+        f"Branches:       {branches_line}",
+        f"Stash:          {result.stash_count}",
+        f"Last commit:    {last_commit_line}",
+        f"Last modified:  {_format_datetime(result.mtime)}",
+    ]
+
+    if result.remotes:
+        lines.append("")
+        lines.append("Remotes:")
+        for r in result.remotes:
+            location = (
+                f"{r.host}/{r.owner}/{r.repo}"
+                if r.host and r.owner and r.repo
+                else "(unparseable)"
+            )
+            lines.append(f"  {r.name:8} {location}  ({r.url})")
+    else:
+        lines.append("")
+        lines.append("Remotes:        (none)")
+
+    lines.append("")
+    lines.append(f"Scanned at:     {result.scanned_at.isoformat()}")
+    return "\n".join(lines)
+
+
+def _format_non_git_inspect_text(result: NonGitInspectResult) -> str:
+    return "\n".join(
+        [
+            f"{result.path} (non-git)",
+            "",
+            f"Files:          {result.file_count}",
+            f"Folders:        {result.folder_count}",
+            f"Size on disk:   {_format_bytes(result.total_size_bytes)}",
+            f"Last modified:  {_format_datetime(result.mtime)}",
+            "",
+            f"Scanned at:     {result.scanned_at.isoformat()}",
+        ]
+    )
+
+
+def _format_datetime(dt: datetime) -> str:
+    """Format a tz-aware datetime as `YYYY-MM-DD HH:MM:SS UTC`."""
+    return dt.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _format_bytes(n: int) -> str:
+    """Format a byte count as a human-readable string (B, KB, MB, GB, TB)."""
+    if n < 1024:
+        return f"{n} B"
+    size = float(n)
+    for unit in ("KB", "MB", "GB"):
+        size /= 1024
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+    size /= 1024
+    return f"{size:.1f} TB"

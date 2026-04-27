@@ -1,15 +1,23 @@
-"""JSON serialization for devfolder scan results."""
+"""JSON serialization for devfolder scan and inspect results."""
 
 import json
 
-__all__ = ["format_json", "node_to_dict", "scan_result_to_dict"]
+__all__ = [
+    "format_inspect_json",
+    "format_json",
+    "inspect_to_dict",
+    "node_to_dict",
+    "scan_result_to_dict",
+]
 
 from .models import (
     CategoryNode,
     ErrorNode,
+    GitInspectResult,
     IgnoredNode,
     Node,
     NodeKind,
+    NonGitInspectResult,
     ProjectNode,
     ScanResult,
     SymlinkNode,
@@ -107,3 +115,64 @@ def format_json(result: ScanResult) -> str:
         A JSON string with 2-space indentation.
     """
     return json.dumps(scan_result_to_dict(result), indent=2)
+
+
+def inspect_to_dict(
+    result: GitInspectResult | NonGitInspectResult,
+) -> dict[str, object]:
+    """Convert an inspect result to a plain dictionary for JSON serialization.
+
+    The output uses a `kind` discriminator (`"git"` or `"non-git"`) so
+    consumers can dispatch on shape.
+    """
+    if isinstance(result, GitInspectResult):
+        return {
+            "kind": "git",
+            "path": str(result.path),
+            "working_tree": {
+                "clean": result.working_tree.clean,
+                "staged": result.working_tree.staged,
+                "modified": result.working_tree.modified,
+                "untracked": result.working_tree.untracked,
+            },
+            "branches": {
+                "total": result.branches.total,
+                "no_upstream": result.branches.no_upstream,
+                "ahead_of_upstream": result.branches.ahead_of_upstream,
+            },
+            "stash_count": result.stash_count,
+            "last_commit_at": (
+                result.last_commit_at.isoformat()
+                if result.last_commit_at is not None
+                else None
+            ),
+            "mtime": result.mtime.isoformat(),
+            "remotes": [
+                {
+                    "name": r.name,
+                    "url": r.url,
+                    "host": r.host,
+                    "owner": r.owner,
+                    "repo": r.repo,
+                }
+                for r in result.remotes
+            ],
+            "scanned_at": result.scanned_at.isoformat(),
+        }
+
+    return {
+        "kind": "non-git",
+        "path": str(result.path),
+        "file_count": result.file_count,
+        "folder_count": result.folder_count,
+        "total_size_bytes": result.total_size_bytes,
+        "mtime": result.mtime.isoformat(),
+        "scanned_at": result.scanned_at.isoformat(),
+    }
+
+
+def format_inspect_json(
+    result: GitInspectResult | NonGitInspectResult,
+) -> str:
+    """Format an inspect result as a JSON string with 2-space indentation."""
+    return json.dumps(inspect_to_dict(result), indent=2)

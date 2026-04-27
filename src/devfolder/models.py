@@ -6,17 +6,22 @@ from enum import Enum
 from pathlib import Path
 
 __all__ = [
+    "BranchSummary",
     "CategoryNode",
     "ErrorNode",
+    "GitInspectResult",
     "IgnoredNode",
     "IgnoreReason",
     "Node",
     "NodeKind",
+    "NonGitInspectResult",
     "Owner",
     "ProjectNode",
     "ProjectType",
+    "RemoteRecord",
     "ScanResult",
     "SymlinkNode",
+    "WorkingTreeState",
 ]
 
 
@@ -178,3 +183,63 @@ class ScanResult:
     def is_root_project(self) -> bool:
         """Check if the root directory itself is a project."""
         return self.root_project is not None
+
+
+@dataclass(frozen=True)
+class WorkingTreeState:
+    """Summary of `git status` output for a working tree."""
+
+    clean: bool
+    staged: int
+    modified: int
+    untracked: int
+
+
+@dataclass(frozen=True)
+class BranchSummary:
+    """Summary of local branches and their upstream relationships."""
+
+    total: int
+    no_upstream: int
+    ahead_of_upstream: int
+
+
+@dataclass(frozen=True)
+class RemoteRecord:
+    """A git remote with its decomposed URL parts.
+
+    `host`, `owner`, and `repo` are None when the URL can't be parsed
+    (e.g. unfamiliar URL shape).
+    """
+
+    name: str
+    url: str
+    host: str | None
+    owner: str | None
+    repo: str | None
+
+
+@dataclass(frozen=True)
+class GitInspectResult:
+    """Per-project inspect output for a git project."""
+
+    path: Path
+    working_tree: WorkingTreeState
+    branches: BranchSummary
+    stash_count: int
+    last_commit_at: datetime | None
+    mtime: datetime
+    remotes: tuple[RemoteRecord, ...]
+    scanned_at: datetime
+
+
+@dataclass(frozen=True)
+class NonGitInspectResult:
+    """Per-project inspect output for a non-git project (untracked or empty)."""
+
+    path: Path
+    file_count: int
+    folder_count: int
+    total_size_bytes: int
+    mtime: datetime
+    scanned_at: datetime

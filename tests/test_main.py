@@ -8,7 +8,7 @@ import pytest
 
 from devfolder import main
 
-from .conftest import make_remote_patch
+from .conftest import git_commit, init_git_repo, make_remote_patch
 
 
 class TestMain:
@@ -304,3 +304,123 @@ class TestOutputFormats:
         captured = capsys.readouterr()
         assert "tools/" in captured.out
         assert captured.err == ""
+
+
+class TestInspectCommand:
+    """Integration tests for `devfolder inspect <path>`."""
+
+    def test_inspect_git_repo_text(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        repo = tmp_path / "repo"
+        init_git_repo(repo)
+        (repo / "a.txt").write_text("a")
+        git_commit(repo)
+
+        with patch("sys.argv", ["devfolder", "inspect", str(repo)]):
+            main()
+
+        out = capsys.readouterr().out
+        assert "(git)" in out
+        assert "Working tree:" in out
+        assert "Branches:" in out
+        assert "Last commit:" in out
+
+    def test_inspect_git_repo_json(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        repo = tmp_path / "repo"
+        init_git_repo(repo)
+        (repo / "a.txt").write_text("a")
+        git_commit(repo)
+
+        with patch(
+            "sys.argv", ["devfolder", "inspect", str(repo), "-o", "json"]
+        ):
+            main()
+
+        out = capsys.readouterr().out
+        parsed = json.loads(out)
+        assert parsed["kind"] == "git"
+        assert parsed["path"] == str(repo)
+        assert parsed["working_tree"]["clean"] is True
+
+    def test_inspect_non_git_dir_text(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        d = tmp_path / "plain"
+        d.mkdir()
+        (d / "a.txt").write_text("hello")
+
+        with patch("sys.argv", ["devfolder", "inspect", str(d)]):
+            main()
+
+        out = capsys.readouterr().out
+        assert "(non-git)" in out
+        assert "Files:" in out
+        assert "Folders:" in out
+
+    def test_inspect_non_git_dir_json(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        d = tmp_path / "plain"
+        d.mkdir()
+        (d / "a.txt").write_text("hello")
+
+        with patch(
+            "sys.argv", ["devfolder", "inspect", str(d), "-o", "json"]
+        ):
+            main()
+
+        parsed = json.loads(capsys.readouterr().out)
+        assert parsed["kind"] == "non-git"
+        assert parsed["file_count"] == 1
+
+    def test_inspect_to_file(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        d = tmp_path / "plain"
+        d.mkdir()
+        (d / "a.txt").write_text("hello")
+        out_path = tmp_path / "inspect.json"
+
+        with patch(
+            "sys.argv",
+            [
+                "devfolder",
+                "inspect",
+                str(d),
+                "-o",
+                "json",
+                "-f",
+                str(out_path),
+            ],
+        ):
+            main()
+
+        assert out_path.exists()
+        parsed = json.loads(out_path.read_text())
+        assert parsed["kind"] == "non-git"
+
+        captured = capsys.readouterr()
+        assert str(out_path) in captured.err
+        assert captured.out == ""
+
+    def test_inspect_nonexistent_path_exits(self, tmp_path: Path) -> None:
+        missing = tmp_path / "does-not-exist"
+
+        with (
+            patch("sys.argv", ["devfolder", "inspect", str(missing)]),
+            pytest.raises(SystemExit, match="1"),
+        ):
+            main()
+
+    def test_inspect_file_path_exits(self, tmp_path: Path) -> None:
+        f = tmp_path / "file.txt"
+        f.write_text("hello")
+
+        with (
+            patch("sys.argv", ["devfolder", "inspect", str(f)]),
+            pytest.raises(SystemExit, match="1"),
+        ):
+            main()

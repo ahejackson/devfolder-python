@@ -6,9 +6,10 @@ from importlib.metadata import version
 from pathlib import Path
 
 from .config import Config
-from .output import format_tree
+from .inspector import inspect
+from .output import format_inspect_text, format_tree
 from .scanner import scan
-from .serializers import format_json
+from .serializers import format_inspect_json, format_json
 
 __all__ = ["create_parser", "main"]
 
@@ -36,6 +37,7 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
     _add_scan_parser(subparsers)
+    _add_inspect_parser(subparsers)
 
     return parser
 
@@ -78,6 +80,40 @@ def _add_scan_parser(
     )
 
 
+def _add_inspect_parser(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    """Configure the `inspect` subparser."""
+    inspect_parser = subparsers.add_parser(
+        "inspect",
+        help="Collect detailed data for a single project",
+        description=(
+            "Collect detailed per-project data: working tree state, "
+            "branches, stash, last commit, remotes (for git projects); "
+            "or file/folder counts and total size (for non-git projects)."
+        ),
+    )
+    inspect_parser.add_argument(
+        "path",
+        type=Path,
+        help="Project directory to inspect",
+    )
+    inspect_parser.add_argument(
+        "--output",
+        "-o",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
+    )
+    inspect_parser.add_argument(
+        "--output-file",
+        "-f",
+        type=Path,
+        default=None,
+        help="Write output to a file instead of stdout",
+    )
+
+
 def main() -> None:
     """Main entry point for the devfolder CLI."""
     parser = create_parser()
@@ -85,6 +121,8 @@ def main() -> None:
 
     if args.command == "scan":
         _run_scan(args)
+    elif args.command == "inspect":
+        _run_inspect(args)
 
 
 def _run_scan(args: argparse.Namespace) -> None:
@@ -112,6 +150,34 @@ def _run_scan(args: argparse.Namespace) -> None:
 
     if output_format == "json" and output_file is None:
         output_file = Path.cwd() / "devfolder.json"
+
+    if output_file is not None:
+        output_file.write_text(output + "\n")
+        print(f"Output written to {output_file}", file=sys.stderr)
+    else:
+        print(output)
+
+
+def _run_inspect(args: argparse.Namespace) -> None:
+    """Execute the `inspect` subcommand."""
+    path: Path = args.path
+    output_format: str = args.output
+    output_file: Path | None = args.output_file
+
+    if not path.exists():
+        print(f"Error: Path does not exist: {path}", file=sys.stderr)
+        sys.exit(1)
+
+    if not path.is_dir():
+        print(f"Error: Path is not a directory: {path}", file=sys.stderr)
+        sys.exit(1)
+
+    result = inspect(path)
+
+    if output_format == "json":
+        output = format_inspect_json(result)
+    else:
+        output = format_inspect_text(result)
 
     if output_file is not None:
         output_file.write_text(output + "\n")

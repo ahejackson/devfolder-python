@@ -1,5 +1,6 @@
 """Shared test fixtures for devfolder tests."""
 
+import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -9,6 +10,54 @@ import pytest
 
 from devfolder.config import Config
 from devfolder.models import Owner
+
+
+def run_git(path: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run a git command in `path`, raising on failure. Test-only helper."""
+    return subprocess.run(
+        ["git", *args],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
+def init_git_repo(path: Path) -> None:
+    """Initialise a fresh git repo at `path` with deterministic test config."""
+    path.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["git", "init", "-q", "-b", "main"], cwd=path, check=True
+    )
+    run_git(path, "config", "user.email", "test@example.com")
+    run_git(path, "config", "user.name", "Test User")
+    run_git(path, "config", "commit.gpgsign", "false")
+
+
+def git_commit(path: Path, message: str = "test") -> None:
+    """Stage everything in `path` and commit with `message`."""
+    run_git(path, "add", "-A")
+    run_git(path, "commit", "-q", "-m", message)
+
+
+def setup_remote_pair(tmp_path: Path) -> tuple[Path, Path]:
+    """Create a bare upstream + working clone with one initial commit pushed.
+
+    Returns (work_path, upstream_path).
+    """
+    upstream = tmp_path / "upstream.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "main", str(upstream)],
+        check=True,
+    )
+
+    work = tmp_path / "work"
+    init_git_repo(work)
+    run_git(work, "remote", "add", "origin", str(upstream))
+    (work / "README.md").write_text("hello")
+    git_commit(work, "initial")
+    run_git(work, "push", "-q", "-u", "origin", "main")
+    return work, upstream
 
 
 @pytest.fixture(scope="session")

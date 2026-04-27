@@ -18,63 +18,18 @@ from devfolder.git import (
     branches,
     get_git_remotes,
     last_commit_at,
+    parse_remote,
     stash_count,
     status,
 )
+from devfolder.models import RemoteRecord
 
-# --- helpers ---
-
-
-def _git(path: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    """Run a git command with stable test config; raise on failure."""
-    return subprocess.run(
-        ["git", *args],
-        cwd=path,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-
-def _init_repo(path: Path) -> None:
-    """Initialise a fresh git repo with deterministic test config."""
-    path.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["git", "init", "-q", "-b", "main"],
-        cwd=path,
-        check=True,
-    )
-    _git(path, "config", "user.email", "test@example.com")
-    _git(path, "config", "user.name", "Test User")
-    _git(path, "config", "commit.gpgsign", "false")
-
-
-def _commit(path: Path, message: str = "test") -> None:
-    """Stage everything in `path` and commit with `message`."""
-    _git(path, "add", "-A")
-    _git(path, "commit", "-q", "-m", message)
-
-
-def _setup_remote_pair(tmp_path: Path) -> tuple[Path, Path]:
-    """Create a bare upstream repo and a working clone with origin set.
-
-    Returns (work_path, upstream_path). Working clone has one initial
-    commit on `main` with upstream tracking configured.
-    """
-    upstream = tmp_path / "upstream.git"
-    subprocess.run(
-        ["git", "init", "-q", "--bare", "-b", "main", str(upstream)],
-        check=True,
-    )
-
-    work = tmp_path / "work"
-    _init_repo(work)
-    _git(work, "remote", "add", "origin", str(upstream))
-    (work / "README.md").write_text("hello")
-    _commit(work, "initial")
-    _git(work, "push", "-q", "-u", "origin", "main")
-    return work, upstream
-
+from .conftest import (
+    git_commit,
+    init_git_repo,
+    run_git,
+    setup_remote_pair,
+)
 
 # --- get_git_remotes (URL parsing — mock-based) ---
 
@@ -164,9 +119,9 @@ class TestStatus:
 
     def test_clean_repo(self, tmp_path: Path) -> None:
         repo = tmp_path / "clean"
-        _init_repo(repo)
+        init_git_repo(repo)
         (repo / "a.txt").write_text("a")
-        _commit(repo)
+        git_commit(repo)
 
         assert status(repo) == WorkingTreeState(
             clean=True, staged=0, modified=0, untracked=0
@@ -174,9 +129,9 @@ class TestStatus:
 
     def test_untracked_files(self, tmp_path: Path) -> None:
         repo = tmp_path / "untracked"
-        _init_repo(repo)
+        init_git_repo(repo)
         (repo / "a.txt").write_text("a")
-        _commit(repo)
+        git_commit(repo)
         (repo / "new1.txt").write_text("x")
         (repo / "new2.txt").write_text("y")
 
@@ -188,9 +143,9 @@ class TestStatus:
 
     def test_modified_files(self, tmp_path: Path) -> None:
         repo = tmp_path / "modified"
-        _init_repo(repo)
+        init_git_repo(repo)
         (repo / "a.txt").write_text("a")
-        _commit(repo)
+        git_commit(repo)
         (repo / "a.txt").write_text("changed")
 
         result = status(repo)
@@ -201,11 +156,11 @@ class TestStatus:
 
     def test_staged_files(self, tmp_path: Path) -> None:
         repo = tmp_path / "staged"
-        _init_repo(repo)
+        init_git_repo(repo)
         (repo / "a.txt").write_text("a")
-        _commit(repo)
+        git_commit(repo)
         (repo / "b.txt").write_text("b")
-        _git(repo, "add", "b.txt")
+        run_git(repo, "add", "b.txt")
 
         result = status(repo)
         assert not result.clean
@@ -215,16 +170,16 @@ class TestStatus:
 
     def test_mixed_state(self, tmp_path: Path) -> None:
         repo = tmp_path / "mixed"
-        _init_repo(repo)
+        init_git_repo(repo)
         (repo / "a.txt").write_text("a")
         (repo / "b.txt").write_text("b")
-        _commit(repo)
+        git_commit(repo)
 
         # Modify a.txt (modified)
         (repo / "a.txt").write_text("a-changed")
         # Stage a new file (staged)
         (repo / "c.txt").write_text("c")
-        _git(repo, "add", "c.txt")
+        run_git(repo, "add", "c.txt")
         # Add another untracked file (untracked)
         (repo / "d.txt").write_text("d")
 
@@ -251,7 +206,7 @@ class TestBranches:
     def test_empty_repo(self, tmp_path: Path) -> None:
         """A repo with no commits has no branches."""
         repo = tmp_path / "empty"
-        _init_repo(repo)
+        init_git_repo(repo)
 
         assert branches(repo) == BranchSummary(
             total=0, no_upstream=0, ahead_of_upstream=0
@@ -259,25 +214,25 @@ class TestBranches:
 
     def test_single_branch_no_upstream(self, tmp_path: Path) -> None:
         repo = tmp_path / "lonely"
-        _init_repo(repo)
+        init_git_repo(repo)
         (repo / "a.txt").write_text("a")
-        _commit(repo)
+        git_commit(repo)
 
         assert branches(repo) == BranchSummary(
             total=1, no_upstream=1, ahead_of_upstream=0
         )
 
     def test_branch_with_upstream_up_to_date(self, tmp_path: Path) -> None:
-        work, _ = _setup_remote_pair(tmp_path)
+        work, _ = setup_remote_pair(tmp_path)
 
         assert branches(work) == BranchSummary(
             total=1, no_upstream=0, ahead_of_upstream=0
         )
 
     def test_branch_ahead_of_upstream(self, tmp_path: Path) -> None:
-        work, _ = _setup_remote_pair(tmp_path)
+        work, _ = setup_remote_pair(tmp_path)
         (work / "more.txt").write_text("more")
-        _commit(work, "second")
+        git_commit(work, "second")
 
         result = branches(work)
         assert result.total == 1
@@ -285,9 +240,9 @@ class TestBranches:
         assert result.ahead_of_upstream == 1
 
     def test_multiple_branches_mixed_upstream(self, tmp_path: Path) -> None:
-        work, _ = _setup_remote_pair(tmp_path)
+        work, _ = setup_remote_pair(tmp_path)
         # Add a second local-only branch
-        _git(work, "branch", "feature")
+        run_git(work, "branch", "feature")
 
         result = branches(work)
         assert result.total == 2
@@ -309,30 +264,30 @@ class TestStashCount:
 
     def test_no_stash(self, tmp_path: Path) -> None:
         repo = tmp_path / "nostash"
-        _init_repo(repo)
+        init_git_repo(repo)
         (repo / "a.txt").write_text("a")
-        _commit(repo)
+        git_commit(repo)
 
         assert stash_count(repo) == 0
 
     def test_single_stash(self, tmp_path: Path) -> None:
         repo = tmp_path / "stashed"
-        _init_repo(repo)
+        init_git_repo(repo)
         (repo / "a.txt").write_text("a")
-        _commit(repo)
+        git_commit(repo)
         (repo / "a.txt").write_text("dirty")
-        _git(repo, "stash", "push", "-m", "wip")
+        run_git(repo, "stash", "push", "-m", "wip")
 
         assert stash_count(repo) == 1
 
     def test_multiple_stashes(self, tmp_path: Path) -> None:
         repo = tmp_path / "many-stashes"
-        _init_repo(repo)
+        init_git_repo(repo)
         (repo / "a.txt").write_text("a")
-        _commit(repo)
+        git_commit(repo)
         for i in range(3):
             (repo / "a.txt").write_text(f"dirty {i}")
-            _git(repo, "stash", "push", "-m", f"wip {i}")
+            run_git(repo, "stash", "push", "-m", f"wip {i}")
 
         assert stash_count(repo) == 3
 
@@ -348,7 +303,7 @@ class TestLastCommitAt:
 
     def test_empty_repo_returns_none(self, tmp_path: Path) -> None:
         repo = tmp_path / "empty"
-        _init_repo(repo)
+        init_git_repo(repo)
 
         assert last_commit_at(repo) is None
 
@@ -356,9 +311,9 @@ class TestLastCommitAt:
         self, tmp_path: Path
     ) -> None:
         repo = tmp_path / "with-commit"
-        _init_repo(repo)
+        init_git_repo(repo)
         (repo / "a.txt").write_text("a")
-        _commit(repo)
+        git_commit(repo)
 
         result = last_commit_at(repo)
         assert result is not None
@@ -381,12 +336,12 @@ class TestDetachedHead:
 
     def test_branches_with_detached_head(self, tmp_path: Path) -> None:
         repo = tmp_path / "detached"
-        _init_repo(repo)
+        init_git_repo(repo)
         (repo / "a.txt").write_text("a")
-        _commit(repo)
+        git_commit(repo)
         # Detach by checking out the commit SHA directly
-        sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
-        _git(repo, "checkout", "-q", sha)
+        sha = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+        run_git(repo, "checkout", "-q", sha)
 
         # Still one branch (main); detached HEAD doesn't add or remove branches
         result = branches(repo)
@@ -394,10 +349,71 @@ class TestDetachedHead:
 
     def test_status_clean_in_detached_head(self, tmp_path: Path) -> None:
         repo = tmp_path / "detached-clean"
-        _init_repo(repo)
+        init_git_repo(repo)
         (repo / "a.txt").write_text("a")
-        _commit(repo)
-        sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
-        _git(repo, "checkout", "-q", sha)
+        git_commit(repo)
+        sha = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+        run_git(repo, "checkout", "-q", sha)
 
         assert status(repo).clean
+
+
+# --- parse_remote ---
+
+
+class TestParseRemote:
+    """URL → RemoteRecord parsing."""
+
+    def test_ssh_with_git_suffix(self) -> None:
+        result = parse_remote(
+            "origin", "git@github.com:ahejackson/devfolder.git"
+        )
+        assert result == RemoteRecord(
+            name="origin",
+            url="git@github.com:ahejackson/devfolder.git",
+            host="github.com",
+            owner="ahejackson",
+            repo="devfolder",
+        )
+
+    def test_ssh_without_git_suffix(self) -> None:
+        result = parse_remote("origin", "git@gitlab.com:org/proj")
+        assert result.host == "gitlab.com"
+        assert result.owner == "org"
+        assert result.repo == "proj"
+
+    def test_https_url(self) -> None:
+        result = parse_remote(
+            "upstream", "https://github.com/microsoft/RustTraining.git"
+        )
+        assert result.host == "github.com"
+        assert result.owner == "microsoft"
+        assert result.repo == "RustTraining"
+
+    def test_git_protocol(self) -> None:
+        result = parse_remote("origin", "git://example.com/owner/repo.git")
+        assert result.host == "example.com"
+        assert result.owner == "owner"
+        assert result.repo == "repo"
+
+    def test_unparseable_url_returns_nones(self) -> None:
+        result = parse_remote("origin", "not-a-url")
+        assert result.name == "origin"
+        assert result.url == "not-a-url"
+        assert result.host is None
+        assert result.owner is None
+        assert result.repo is None
+
+    def test_url_with_only_owner_no_repo(self) -> None:
+        """SSH-style URL missing the repo part still yields owner."""
+        result = parse_remote("origin", "git@github.com:ahejackson")
+        assert result.host == "github.com"
+        assert result.owner == "ahejackson"
+        assert result.repo is None
+
+    def test_repo_name_kept_intact_when_not_dotgit(self) -> None:
+        """A repo name that ends in something other than `.git` is kept."""
+        result = parse_remote(
+            "origin", "https://github.com/owner/some.repo"
+        )
+        assert result.repo == "some.repo"
