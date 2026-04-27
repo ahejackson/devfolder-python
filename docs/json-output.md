@@ -1,5 +1,7 @@
 # JSON Output Reference
 
+> Updated for DevFolder **0.5.0**. If the version in [`pyproject.toml`](../pyproject.toml) is newer, this document may be stale — cross-check against [`CHANGELOG.md`](../CHANGELOG.md).
+
 DevFolder emits machine-readable JSON from three subcommands. This document is the canonical reference for those shapes — useful when consuming the output from another tool (e.g. the [`devfolder-gui`](https://github.com/ahejackson/devfolder-gui) viewer).
 
 ## Commands that emit JSON
