@@ -10,6 +10,7 @@ __all__ = [
     "CategoryNode",
     "ErrorNode",
     "GitInspectResult",
+    "GitLayout",
     "IgnoredNode",
     "IgnoreReason",
     "Node",
@@ -45,6 +46,21 @@ class ProjectType(Enum):
     OTHER_REMOTE = "other-remote"
 
 
+class GitLayout(Enum):
+    """Physical layout of a git project's metadata.
+
+    `WORKING_TREE` is the standard layout (`.git/` directory inside
+    the project). `LINKED` is the worktree/submodule shape — `.git`
+    is a file containing a `gitdir:` pointer. `BARE` is a bare
+    repository where the project directory itself holds the git
+    data and there is no working tree.
+    """
+
+    WORKING_TREE = "working-tree"
+    LINKED = "linked"
+    BARE = "bare"
+
+
 @dataclass(frozen=True)
 class Owner:
     """A remote owner identity (host + name) used for project classification."""
@@ -76,6 +92,7 @@ class ProjectNode(Node):
     project_type: ProjectType
     remote_url: str | None = None
     owner: str | None = None
+    git_layout: GitLayout | None = None
 
     def __init__(
         self,
@@ -84,6 +101,7 @@ class ProjectNode(Node):
         project_type: ProjectType,
         remote_url: str | None = None,
         owner: str | None = None,
+        git_layout: GitLayout | None = None,
     ) -> None:
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "path", path)
@@ -91,6 +109,7 @@ class ProjectNode(Node):
         object.__setattr__(self, "project_type", project_type)
         object.__setattr__(self, "remote_url", remote_url)
         object.__setattr__(self, "owner", owner)
+        object.__setattr__(self, "git_layout", git_layout)
 
 
 @dataclass(frozen=True)

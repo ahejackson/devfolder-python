@@ -9,6 +9,7 @@ from devfolder.models import (
     CategoryNode,
     ErrorNode,
     GitInspectResult,
+    GitLayout,
     IgnoredNode,
     IgnoreReason,
     NonGitInspectResult,
@@ -32,11 +33,12 @@ class TestNodeToDict:
     """Tests for node_to_dict()."""
 
     def test_project_node(self) -> None:
-        """A project node includes kind, name, path, project_type, remote_url, owner."""
+        """A project node serialises all expected scan-side fields."""
         node = ProjectNode(
             name="my-tool",
             path=Path("/dev/tools/my-tool"),
             project_type=ProjectType.LOCAL_GIT,
+            git_layout=GitLayout.WORKING_TREE,
         )
         result = node_to_dict(node)
         assert result == {
@@ -46,7 +48,38 @@ class TestNodeToDict:
             "project_type": "local-git",
             "remote_url": None,
             "owner": None,
+            "git_layout": "working-tree",
         }
+
+    def test_project_node_no_git_layout(self) -> None:
+        """A non-git project (EMPTY / LOCAL_UNTRACKED) has git_layout=null."""
+        node = ProjectNode(
+            name="empty",
+            path=Path("/dev/empty"),
+            project_type=ProjectType.EMPTY,
+        )
+        result = node_to_dict(node)
+        assert result["git_layout"] is None
+
+    def test_project_node_linked_layout(self) -> None:
+        node = ProjectNode(
+            name="worktree",
+            path=Path("/dev/worktree"),
+            project_type=ProjectType.LOCAL_GIT,
+            git_layout=GitLayout.LINKED,
+        )
+        result = node_to_dict(node)
+        assert result["git_layout"] == "linked"
+
+    def test_project_node_bare_layout(self) -> None:
+        node = ProjectNode(
+            name="repo.git",
+            path=Path("/dev/repo.git"),
+            project_type=ProjectType.LOCAL_GIT,
+            git_layout=GitLayout.BARE,
+        )
+        result = node_to_dict(node)
+        assert result["git_layout"] == "bare"
 
     def test_project_node_with_remote(self) -> None:
         """A project node with a remote URL and owner includes both in the output."""

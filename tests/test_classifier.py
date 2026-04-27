@@ -6,6 +6,7 @@ import pytest
 
 from devfolder.classifier import (
     classify_project,
+    detect_git_layout,
     has_dot_git,
     is_bare_git_repo,
     is_empty_directory,
@@ -14,7 +15,7 @@ from devfolder.classifier import (
     parse_remote_url,
 )
 from devfolder.config import Config
-from devfolder.models import Owner, ProjectType
+from devfolder.models import GitLayout, Owner, ProjectType
 
 from .conftest import make_remote_patch
 
@@ -277,6 +278,31 @@ class TestIsGitProject:
         assert is_git_project(empty_dir) is False
 
 
+# --- detect_git_layout ---
+
+
+class TestDetectGitLayout:
+    """Tests for git-layout detection."""
+
+    def test_working_tree(self, local_git_project: Path) -> None:
+        assert detect_git_layout(local_git_project) is GitLayout.WORKING_TREE
+
+    def test_linked(self, tmp_path: Path) -> None:
+        d = tmp_path / "linked"
+        d.mkdir()
+        (d / ".git").write_text("gitdir: /elsewhere\n")
+        assert detect_git_layout(d) is GitLayout.LINKED
+
+    def test_bare(self, bare_git_project: Path) -> None:
+        assert detect_git_layout(bare_git_project) is GitLayout.BARE
+
+    def test_non_git(self, untracked_project: Path) -> None:
+        assert detect_git_layout(untracked_project) is None
+
+    def test_empty(self, empty_dir: Path) -> None:
+        assert detect_git_layout(empty_dir) is None
+
+
 # --- classify_project ---
 
 
@@ -308,6 +334,14 @@ class TestClassifyProject:
         assert result.project_type is ProjectType.LOCAL_GIT
         assert result.remote_url is None
         assert result.owner is None
+        assert result.git_layout is GitLayout.WORKING_TREE
+
+    def test_non_git_has_no_layout(
+        self, untracked_project: Path, config: Config
+    ) -> None:
+        result = classify_project(untracked_project, config)
+        assert result.project_type is ProjectType.LOCAL_UNTRACKED
+        assert result.git_layout is None
 
     def test_dot_git_file_classifies_as_git(
         self, tmp_path: Path, config: Config
@@ -320,6 +354,7 @@ class TestClassifyProject:
         with make_remote_patch({}):
             result = classify_project(project, config)
         assert result.project_type is ProjectType.LOCAL_GIT
+        assert result.git_layout is GitLayout.LINKED
 
     def test_bare_repo_no_remotes_classifies_as_local_git(
         self, bare_git_project: Path, config: Config
@@ -329,6 +364,7 @@ class TestClassifyProject:
         assert result.project_type is ProjectType.LOCAL_GIT
         assert result.remote_url is None
         assert result.owner is None
+        assert result.git_layout is GitLayout.BARE
 
     def test_bare_repo_with_owned_remote(
         self, bare_git_project: Path, config: Config
@@ -338,6 +374,7 @@ class TestClassifyProject:
             result = classify_project(bare_git_project, config)
         assert result.project_type is ProjectType.OWNED_REMOTE
         assert result.owner == "testuser"
+        assert result.git_layout is GitLayout.BARE
 
     def test_owned_remote_project(
         self, owned_remote_project: Path, config: Config

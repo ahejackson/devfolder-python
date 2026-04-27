@@ -4,10 +4,11 @@ from pathlib import Path
 
 from .config import Config
 from .git import get_git_remotes
-from .models import Owner, ProjectNode, ProjectType
+from .models import GitLayout, Owner, ProjectNode, ProjectType
 
 __all__ = [
     "classify_project",
+    "detect_git_layout",
     "get_git_remotes",
     "has_dot_git",
     "is_bare_git_repo",
@@ -155,6 +156,23 @@ def is_git_project(path: Path) -> bool:
     return has_dot_git(path) or is_bare_git_repo(path)
 
 
+def detect_git_layout(path: Path) -> GitLayout | None:
+    """Determine which git layout applies to `path`, or None.
+
+    Returns `WORKING_TREE` for a `.git/` directory, `LINKED` for a
+    `.git` file (worktree/submodule), `BARE` for a structural bare
+    layout, and None for non-git directories.
+    """
+    dot_git = path / ".git"
+    if dot_git.is_dir():
+        return GitLayout.WORKING_TREE
+    if dot_git.is_file():
+        return GitLayout.LINKED
+    if is_bare_git_repo(path):
+        return GitLayout.BARE
+    return None
+
+
 def classify_project(path: Path, config: Config) -> ProjectNode:
     """Classify a project based on its git status.
 
@@ -166,9 +184,10 @@ def classify_project(path: Path, config: Config) -> ProjectNode:
         A ProjectNode with the appropriate classification.
     """
     name = path.name
+    layout = detect_git_layout(path)
 
     # Non-git projects: empty or untracked.
-    if not is_git_project(path):
+    if layout is None:
         if is_empty_directory(path):
             return ProjectNode(
                 name=name, path=path, project_type=ProjectType.EMPTY
@@ -180,7 +199,12 @@ def classify_project(path: Path, config: Config) -> ProjectNode:
     # Git project (working-tree, linked, or bare). Classify by remotes.
     remotes = get_git_remotes(path)
     if not remotes:
-        return ProjectNode(name=name, path=path, project_type=ProjectType.LOCAL_GIT)
+        return ProjectNode(
+            name=name,
+            path=path,
+            project_type=ProjectType.LOCAL_GIT,
+            git_layout=layout,
+        )
 
     # Get the primary remote URL (origin first, then first available)
     if "origin" in remotes:
@@ -197,6 +221,7 @@ def classify_project(path: Path, config: Config) -> ProjectNode:
             project_type=ProjectType.OWNED_REMOTE,
             remote_url=remote_url,
             owner=matched,
+            git_layout=layout,
         )
 
     return ProjectNode(
@@ -204,4 +229,5 @@ def classify_project(path: Path, config: Config) -> ProjectNode:
         path=path,
         project_type=ProjectType.OTHER_REMOTE,
         remote_url=remote_url,
+        git_layout=layout,
     )

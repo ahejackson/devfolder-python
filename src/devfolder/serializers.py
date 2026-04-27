@@ -52,6 +52,11 @@ def node_to_dict(
                 "project_type": node.project_type.value,
                 "remote_url": node.remote_url,
                 "owner": node.owner,
+                "git_layout": (
+                    node.git_layout.value
+                    if node.git_layout is not None
+                    else None
+                ),
             }
             if inspect_by_path is not None:
                 d["inspect"] = inspect_by_path.get(node.path)
