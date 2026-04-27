@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-27
+
+### Added
+- `devfolder report <root>` subcommand. Scans a directory tree and runs `inspect` on every project, emitting a single augmented JSON document (the scan output with each project node carrying its inspect record). Progress lines (`Inspecting project N of M: <path>`) are written to stderr; the JSON document is written to a file (default: `report.json` in CWD; override with `-f`). Built for the salvage-laptop use case — one sweep that surfaces unpushed work, untracked branches, recent activity, and disk usage across an entire dev folder.
+
 ## [0.3.0] - 2026-04-27
 
 ### Added

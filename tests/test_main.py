@@ -424,3 +424,123 @@ class TestInspectCommand:
             pytest.raises(SystemExit, match="1"),
         ):
             main()
+
+
+class TestReportCommand:
+    """Integration tests for `devfolder report <root>`."""
+
+    def _make_report_tree(self, tmp_path: Path) -> tuple[Path, Path]:
+        """Build a tree with one git project under a category."""
+        root = tmp_path / "dev"
+        root.mkdir()
+        cat = root / "tools"
+        cat.mkdir()
+        repo = cat / "repo"
+        init_git_repo(repo)
+        (repo / "a.txt").write_text("a")
+        git_commit(repo)
+
+        config_file = tmp_path / "config.toml"
+        config_file.write_text("")
+        return root, config_file
+
+    def test_report_writes_default_file(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """`devfolder report <root>` defaults to ./report.json."""
+        root, config_file = self._make_report_tree(tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        with patch(
+            "sys.argv",
+            ["devfolder", "report", str(root), "--config", str(config_file)],
+        ):
+            main()
+
+        out_file = tmp_path / "report.json"
+        assert out_file.exists()
+        parsed = json.loads(out_file.read_text())
+        # Augmented project has an inspect field
+        tools = parsed["children"][0]
+        repo_node = tools["children"][0]
+        assert "inspect" in repo_node
+        assert repo_node["inspect"]["kind"] == "git"
+
+        captured = capsys.readouterr()
+        # Stderr carries progress + summary; stdout stays empty
+        assert "Inspecting project" in captured.err
+        assert "report.json" in captured.err
+        assert captured.out == ""
+
+    def test_report_writes_explicit_file(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        root, config_file = self._make_report_tree(tmp_path)
+        out_path = tmp_path / "custom.json"
+
+        with patch(
+            "sys.argv",
+            [
+                "devfolder",
+                "report",
+                str(root),
+                "--config",
+                str(config_file),
+                "-f",
+                str(out_path),
+            ],
+        ):
+            main()
+
+        assert out_path.exists()
+        parsed = json.loads(out_path.read_text())
+        assert parsed["root"] == str(root)
+
+        captured = capsys.readouterr()
+        assert str(out_path) in captured.err
+
+    def test_report_progress_lines_to_stderr(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Progress format matches `Inspecting project N of M: <path>`."""
+        root, config_file = self._make_report_tree(tmp_path)
+        out_path = tmp_path / "r.json"
+
+        with patch(
+            "sys.argv",
+            [
+                "devfolder",
+                "report",
+                str(root),
+                "--config",
+                str(config_file),
+                "-f",
+                str(out_path),
+            ],
+        ):
+            main()
+
+        err = capsys.readouterr().err
+        assert "Inspecting project 1 of 1:" in err
+
+    def test_report_nonexistent_path_exits(self, tmp_path: Path) -> None:
+        missing = tmp_path / "does-not-exist"
+
+        with (
+            patch("sys.argv", ["devfolder", "report", str(missing)]),
+            pytest.raises(SystemExit, match="1"),
+        ):
+            main()
+
+    def test_report_file_path_exits(self, tmp_path: Path) -> None:
+        f = tmp_path / "file.txt"
+        f.write_text("hello")
+
+        with (
+            patch("sys.argv", ["devfolder", "report", str(f)]),
+            pytest.raises(SystemExit, match="1"),
+        ):
+            main()

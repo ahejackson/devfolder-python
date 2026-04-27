@@ -8,6 +8,7 @@ A CLI tool to scan and categorize local development projects.
 uv run devfolder scan                 # Scan current directory
 uv run devfolder scan ~/dev           # Scan a specific directory
 uv run devfolder inspect ~/dev/myrepo # Detailed data for one project
+uv run devfolder report ~/dev         # Scan + inspect every project (single JSON)
 ```
 
 ## Project Structure
@@ -19,6 +20,7 @@ src/devfolder/
 ├── scanner.py       # Directory scanning logic
 ├── classifier.py    # Project classification
 ├── inspector.py     # Per-project detailed inspect
+├── report.py        # Scan + inspect-all augmented document
 ├── git.py           # Git CLI wrappers
 ├── models.py        # Data classes and enums
 ├── output.py        # Text formatting (tree + inspect)
