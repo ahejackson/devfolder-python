@@ -353,6 +353,69 @@ class TestScan:
 
         assert len(result.children) == 0
 
+    def test_bare_repo_at_root(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        """A bare repo as the scan root is treated as a root project."""
+        root = tmp_path / "myrepo.git"
+        root.mkdir()
+        (root / "HEAD").write_text("ref: refs/heads/main\n")
+        (root / "objects").mkdir()
+        (root / "refs").mkdir()
+
+        with make_remote_patch({}):
+            result = scan(root, config)
+
+        assert result.is_root_project is True
+        assert result.root_project is not None
+        assert result.root_project.project_type is ProjectType.LOCAL_GIT
+
+    def test_bare_repo_at_category_level(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        """A bare repo at depth 1 is a project, not a category."""
+        root = tmp_path / "dev"
+        root.mkdir()
+        bare = root / "myrepo.git"
+        bare.mkdir()
+        (bare / "HEAD").write_text("ref: refs/heads/main\n")
+        (bare / "objects").mkdir()
+        (bare / "refs").mkdir()
+
+        with make_remote_patch({}):
+            result = scan(root, config)
+
+        children_by_name = {c.name: c for c in result.children}
+        assert "myrepo.git" in children_by_name
+        node = children_by_name["myrepo.git"]
+        assert isinstance(node, ProjectNode)
+        assert node.project_type is ProjectType.LOCAL_GIT
+
+    def test_bare_repo_inside_category(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        """A bare repo inside a category is a ProjectNode, not recursed into."""
+        root = tmp_path / "dev"
+        root.mkdir()
+        archive = root / "archive"
+        archive.mkdir()
+        bare = archive / "old.git"
+        bare.mkdir()
+        (bare / "HEAD").write_text("ref: refs/heads/main\n")
+        (bare / "objects").mkdir()
+        (bare / "refs").mkdir()
+
+        with make_remote_patch({}):
+            result = scan(root, config)
+
+        archive_node = next(c for c in result.children if c.name == "archive")
+        assert isinstance(archive_node, CategoryNode)
+        assert len(archive_node.children) == 1
+        bare_node = archive_node.children[0]
+        assert isinstance(bare_node, ProjectNode)
+        assert bare_node.name == "old.git"
+        assert bare_node.project_type is ProjectType.LOCAL_GIT
+
 
 class TestNestedCategories:
     """Tests for nested category detection."""

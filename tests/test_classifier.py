@@ -7,7 +7,9 @@ import pytest
 from devfolder.classifier import (
     classify_project,
     has_dot_git,
+    is_bare_git_repo,
     is_empty_directory,
+    is_git_project,
     match_owner,
     parse_remote_url,
 )
@@ -207,6 +209,74 @@ class TestHasDotGit:
         assert has_dot_git(project) is True
 
 
+# --- is_bare_git_repo ---
+
+
+class TestIsBareGitRepo:
+    """Tests for bare-repo structural detection."""
+
+    def test_real_bare_repo(self, bare_git_project: Path) -> None:
+        assert is_bare_git_repo(bare_git_project) is True
+
+    def test_structural_minimum(self, tmp_path: Path) -> None:
+        """HEAD file + objects/ + refs/ is enough to count as bare."""
+        d = tmp_path / "structural.git"
+        d.mkdir()
+        (d / "HEAD").write_text("ref: refs/heads/main\n")
+        (d / "objects").mkdir()
+        (d / "refs").mkdir()
+        assert is_bare_git_repo(d) is True
+
+    def test_working_tree_project_is_not_bare(
+        self, local_git_project: Path
+    ) -> None:
+        assert is_bare_git_repo(local_git_project) is False
+
+    def test_empty_dir_is_not_bare(self, empty_dir: Path) -> None:
+        assert is_bare_git_repo(empty_dir) is False
+
+    def test_partial_layout_is_not_bare(self, tmp_path: Path) -> None:
+        """HEAD without objects/refs is not enough."""
+        d = tmp_path / "partial"
+        d.mkdir()
+        (d / "HEAD").write_text("ref: refs/heads/main\n")
+        assert is_bare_git_repo(d) is False
+
+    def test_head_must_be_file_not_dir(self, tmp_path: Path) -> None:
+        """A `HEAD` directory shouldn't count (would shadow the file check)."""
+        d = tmp_path / "weird"
+        d.mkdir()
+        (d / "HEAD").mkdir()
+        (d / "objects").mkdir()
+        (d / "refs").mkdir()
+        assert is_bare_git_repo(d) is False
+
+
+# --- is_git_project ---
+
+
+class TestIsGitProject:
+    """Tests for the combined git-layout predicate."""
+
+    def test_dot_git_directory(self, local_git_project: Path) -> None:
+        assert is_git_project(local_git_project) is True
+
+    def test_dot_git_file(self, tmp_path: Path) -> None:
+        d = tmp_path / "linked"
+        d.mkdir()
+        (d / ".git").write_text("gitdir: /elsewhere\n")
+        assert is_git_project(d) is True
+
+    def test_bare_repo(self, bare_git_project: Path) -> None:
+        assert is_git_project(bare_git_project) is True
+
+    def test_untracked_project(self, untracked_project: Path) -> None:
+        assert is_git_project(untracked_project) is False
+
+    def test_empty_dir(self, empty_dir: Path) -> None:
+        assert is_git_project(empty_dir) is False
+
+
 # --- classify_project ---
 
 
@@ -250,6 +320,24 @@ class TestClassifyProject:
         with make_remote_patch({}):
             result = classify_project(project, config)
         assert result.project_type is ProjectType.LOCAL_GIT
+
+    def test_bare_repo_no_remotes_classifies_as_local_git(
+        self, bare_git_project: Path, config: Config
+    ) -> None:
+        with make_remote_patch({}):
+            result = classify_project(bare_git_project, config)
+        assert result.project_type is ProjectType.LOCAL_GIT
+        assert result.remote_url is None
+        assert result.owner is None
+
+    def test_bare_repo_with_owned_remote(
+        self, bare_git_project: Path, config: Config
+    ) -> None:
+        remotes = {"origin": "git@github.com:testuser/repo.git"}
+        with make_remote_patch(remotes):
+            result = classify_project(bare_git_project, config)
+        assert result.project_type is ProjectType.OWNED_REMOTE
+        assert result.owner == "testuser"
 
     def test_owned_remote_project(
         self, owned_remote_project: Path, config: Config

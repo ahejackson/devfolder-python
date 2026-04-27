@@ -192,6 +192,17 @@ def dev_folder(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def bare_git_project(tmp_path: Path) -> Path:
+    """A real bare git repository, created via `git init --bare`."""
+    d = tmp_path / "myrepo.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "main", str(d)],
+        check=True,
+    )
+    return d
+
+
+@pytest.fixture
 def root_is_project(tmp_path: Path) -> Path:
     """A root directory that is itself a git project."""
     root = tmp_path / "project-root"

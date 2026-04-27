@@ -10,7 +10,9 @@ __all__ = [
     "classify_project",
     "get_git_remotes",
     "has_dot_git",
+    "is_bare_git_repo",
     "is_empty_directory",
+    "is_git_project",
     "match_owner",
     "parse_remote_url",
 ]
@@ -112,6 +114,47 @@ def has_dot_git(path: Path) -> bool:
     return dot_git.is_dir() or dot_git.is_file()
 
 
+def is_bare_git_repo(path: Path) -> bool:
+    """Check if a path looks structurally like a bare git repository.
+
+    A bare repo has no working tree — the project directory itself
+    holds the git data. Detected by the presence of `HEAD` (file),
+    `objects/` (directory), and `refs/` (directory) at the top
+    level. This is a fast structural check; the inspector confirms
+    via `git rev-parse --is-bare-repository` when collecting full
+    project detail.
+
+    Args:
+        path: Path to check.
+
+    Returns:
+        True if `path` appears to be a bare git repository.
+    """
+    return (
+        (path / "HEAD").is_file()
+        and (path / "objects").is_dir()
+        and (path / "refs").is_dir()
+    )
+
+
+def is_git_project(path: Path) -> bool:
+    """Check if a path is any recognised git project layout.
+
+    Returns True for working-tree (`.git/` directory), linked (`.git`
+    file — worktrees and submodules), and bare (`HEAD` + `objects/`
+    + `refs/`) layouts. Used by the scanner to decide whether a
+    directory is a project leaf or should be descended into as a
+    category.
+
+    Args:
+        path: Path to check.
+
+    Returns:
+        True if any git layout is detected.
+    """
+    return has_dot_git(path) or is_bare_git_repo(path)
+
+
 def classify_project(path: Path, config: Config) -> ProjectNode:
     """Classify a project based on its git status.
 
@@ -124,17 +167,17 @@ def classify_project(path: Path, config: Config) -> ProjectNode:
     """
     name = path.name
 
-    # Check if empty
-    if is_empty_directory(path):
-        return ProjectNode(name=name, path=path, project_type=ProjectType.EMPTY)
-
-    # Check if it's a git repository
-    if not has_dot_git(path):
+    # Non-git projects: empty or untracked.
+    if not is_git_project(path):
+        if is_empty_directory(path):
+            return ProjectNode(
+                name=name, path=path, project_type=ProjectType.EMPTY
+            )
         return ProjectNode(
             name=name, path=path, project_type=ProjectType.LOCAL_UNTRACKED
         )
 
-    # Get remotes
+    # Git project (working-tree, linked, or bare). Classify by remotes.
     remotes = get_git_remotes(path)
     if not remotes:
         return ProjectNode(name=name, path=path, project_type=ProjectType.LOCAL_GIT)
